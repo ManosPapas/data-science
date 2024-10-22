@@ -1,0 +1,20 @@
+'db1':
+  'SERVER': ''
+  'USER_NAME': ''
+  'PASSWORD': ''
+  'DATABASE': ''
+  'DRIVER': 'SQL Server'
+  
+'db2':
+  'SERVER': ''
+  'USER_NAME': ''
+  'PASSWORD': ''
+  'DATABASE': ''
+  'DRIVER': 'SQL Server'
+
+'db3':
+  'SERVER': ''
+  'USER_NAME': ''
+  'PASSWORD': ''
+  'DATABASE': ''
+  'DRIVER': 'ODBC Driver 18 for SQL Server'

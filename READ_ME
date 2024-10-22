@@ -1,0 +1,53 @@
+-----------------------------------------------------------------------------------------------------------------------------------------------
+
+For function documentation please go to documentation.py. 
+There you will find the function declaration and the actual documentation.
+
+-----------------------------------------------------------------------------------------------------------------------------------------------
+
+Name conventions:
+    In general we use the principle of convention over configuration. That means that the system expect specific names as variables. 
+    The main benefit is that we use the same name configuration and therefore we write less code.
+    Notice that filenames and files that are generated or expected as input have the same name.
+    For example, you might have a python file named as 'check.py'; that file will ask input from either an sql file named 'check.sql' or csv file 'check.csv'
+    and the outputs will be 'check.csv' or 'check.xlsx' or 'check_BI.cv' (for PowerBI use).
+    That does not mean if you have a different name the system will crash, but it is a convention so you can navigate through things faster.
+    Obviously you might use a file with different name, which might happen when you want to use a SQL file that already exists and you want to create a new report with a different name.
+
+-----------------------------------------------------------------------------------------------------------------------------------------------
+
+File structure:
+    Core: All main functionality will be located there. All requests for analysis and ML projects will be considered as side projects.
+        Projects will use the core functionality. 
+        Hence, in the projects the only extra code should be the code that is specific to the project; thus, not part of the Core.
+
+        xTemp: used only for local use. Store csv you export or import. Do not push any changes here.
+
+-----------------------------------------------------------------------------------------------------------------------------------------------
+Python files:
+    Functions:
+        Function name convention: xxx_xxx_xxx()
+
+    All unit tests should Start with the word 'Test'.
+    All sql calls files should end with '_calls'. Their functions end start with 'call_'    
+
+-----------------------------------------------------------------------------------------------------------------------------------------------
+SQL files:
+    Format_1: fileNameForSQL.sql
+    Meaning: the sql brings data from a table with that name.
+
+    Format_2: file_name.sql
+    Meaning: the file name describes the concept that we want to exctract not the tables.
+
+    Column names: Column names should have the following format: ThisIsAColumnName
+    Do not rename columns. Keep the default as it is expected from the Core. Below are the excepations.
+
+    Rename columns:
+        Any CreatedDate column to Table.CreatedDate
+
+-----------------------------------------------------------------------------------------------------------------------------------------------
+Documentation:
+    documentation.py has all documentation. In jupyter notebook you can call a function to check its documentation.
+    For example, print(doc_strings('db_connection__doc__'))
+
+-----------------------------------------------------------------------------------------------------------------------------------------------
