@@ -96,11 +96,12 @@ core/        the package (flat layout at the repo root — no src/ wrapper)
   io/           readers, writers, parquet cache (Polars/DuckDB)
   db/           pooled engines, parameterized typed query loaders
   api/          HTTP clients (retries, auth, pagination)
-  features/     reusable feature engineering (e.g. temporal)
-  analytics/    stats, effect sizes, CIs, experiment/A-B analysis
+  features/     stateless transforms: clean, transform, temporal, validate (frame in, frame out)
+  analytics/    stats: summary, missingness, correlation, effect sizes, CIs, tests
+  modeling/     leakage-aware ML prep: split (incl. time-based), preprocess (sklearn pipelines)
   viz/          base.py = @chart decorator + theme + grid; charts by group:
                 eda, model, cluster, explain, timeseries
-  utils/        logging, memory profiling
+  utils/        memory profiling
 tests/       pytest, mirrors core/
 ```
 

@@ -15,6 +15,7 @@ from core.analytics import stats
 from core.api.client import get_client, paginate
 from core.db.engine import get_engine
 from core.db.query import load_sql_file, read_sql, write_sql
+from core.features import clean, temporal, transform, validate
 from core.io.cache import cached
 from core.io.readers import (
     query_files,
@@ -26,6 +27,7 @@ from core.io.readers import (
     scan_parquet,
 )
 from core.io.writers import write_csv, write_excel, write_parquet
+from core.modeling import preprocess, split
 from core.utils.memory import memory_report
 from core.viz import base, cluster, conceptual, eda, explain, model, timeseries
 from core.viz.base import set_theme
@@ -33,6 +35,7 @@ from core.viz.base import set_theme
 __all__ = [
     "base",
     "cached",
+    "clean",
     "cluster",
     "conceptual",
     "cs",
@@ -47,6 +50,7 @@ __all__ = [
     "paginate",
     "pd",
     "pl",
+    "preprocess",
     "query_files",
     "read_csv",
     "read_excel",
@@ -56,8 +60,12 @@ __all__ = [
     "read_sql",
     "scan_parquet",
     "set_theme",
+    "split",
     "stats",
+    "temporal",
     "timeseries",
+    "transform",
+    "validate",
     "write_csv",
     "write_excel",
     "write_parquet",

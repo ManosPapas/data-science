@@ -26,6 +26,7 @@ dependencies = [
     "pandas>=2.2",
     "scikit-learn>=1.4",
     "statsmodels>=0.14",
+    "holidays>=0.50",
     # Visualization
     "matplotlib>=3.8",
     "seaborn>=0.13",
@@ -106,6 +107,7 @@ module = [
     "statsmodels.*",
     "seaborn.*",
     "shap.*",
+    "holidays.*",
 ]
 ignore_missing_imports = true
 
