@@ -25,7 +25,7 @@ tomorrow, it lives in the package with a test — not in a notebook cell.
 | Concern | Tool |
 |---|---|
 | DataFrames / compute | **Polars** (lazy/streaming) + **DuckDB** (SQL over files, out-of-core) |
-| Config & secrets | **pydantic-settings** + `.env` (secrets) + `conf/*.yaml` (non-secret) |
+| Config & secrets | **pydantic-settings**; secrets in `.env` / gitignored `conf/*.local.yaml`; non-secret in `conf/*.yaml` |
 | Notebooks | **jupytext** (pair to `.py`) + **nbstripout** (strip outputs) |
 | Dependencies | **uv** (+ committed lockfile) |
 | Quality | **ruff** (lint+format), **mypy** (strict), **pytest**, **pre-commit** |
@@ -67,7 +67,8 @@ cross-cutting boilerplate is owned by a decorator or shared base, not repeated.
 - **Prefer Parquet** over CSV for anything that persists.
 - **Parameterize all SQL** — bind values (`:param`), never string-format them into the query.
 - **One typed loader per data source** (load → pin schema → return), reused everywhere.
-- **Secrets through settings**: read via a typed `Settings`/`get_settings()`, sourced from `.env`.
+- **Secrets never in git**: app env in `.env`, connection secrets in gitignored `conf/*.local.yaml`;
+  read through `core.config` (`get_settings` / `get_connection` / `get_api`). One typed loader per source.
 - **Promote** reusable notebook code into `core/` and import it back.
 - Cache expensive pulls to Parquet rather than re-querying.
 

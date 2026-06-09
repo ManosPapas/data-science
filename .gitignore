@@ -2,6 +2,7 @@
 .env
 .env.*
 !.env.example
+conf/*.local.yaml
 
 # --- Data: keep the folder structure, ignore the contents ---
 /data/**

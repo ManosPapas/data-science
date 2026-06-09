@@ -17,6 +17,7 @@ dependencies = [
     # Databases & APIs
     "sqlalchemy>=2.0",
     "connectorx>=0.3.3",
+    "pyodbc>=5.1",
     "httpx>=0.27",
     "tenacity>=8.2",
     # Stats / modeling (pandas only at the last mile)
@@ -38,6 +39,10 @@ geo = [
 ]
 explain = [
     "shap>=0.44",
+]
+excel = [
+    "fastexcel>=0.10",
+    "xlsxwriter>=3.2",
 ]
 
 [dependency-groups]

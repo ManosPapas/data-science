@@ -1,0 +1,10 @@
+# Named HTTP APIs — NON-SECRET template.
+#
+# base_url + non-secret headers here; put the secret TOKEN in conf/apis.local.yaml (gitignored),
+# which is deep-merged over this file. Refer to an API by its key, e.g. get_client("example").
+
+example:
+  base_url: "https://api.example.com"
+  headers:
+    Accept: "application/json"
+  # token: "..."   # set in conf/apis.local.yaml
