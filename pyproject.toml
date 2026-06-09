@@ -1,0 +1,94 @@
+[project]
+name = "data-science"
+version = "0.1.0"
+description = "Commercial / decision-science data-science workspace."
+readme = "README.md"
+requires-python = ">=3.13"
+authors = [{ name = "Emmanouil Papagiannidis" }]
+dependencies = [
+    # Data engines — the tabular backbone
+    "polars>=1.0",
+    "duckdb>=1.0",
+    "pyarrow>=16.0",
+    # Config & validation
+    "pydantic>=2.7",
+    "pydantic-settings>=2.3",
+    "pyyaml>=6.0",
+    # Databases & APIs
+    "sqlalchemy>=2.0",
+    "connectorx>=0.3.3",
+    "httpx>=0.27",
+    "tenacity>=8.2",
+    # Stats / modeling (pandas only at the last mile)
+    "numpy>=1.26",
+    "scipy>=1.13",
+    "pandas>=2.2",
+    "scikit-learn>=1.4",
+    "statsmodels>=0.14",
+    # Visualization
+    "matplotlib>=3.8",
+    "seaborn>=0.13",
+]
+
+[project.optional-dependencies]
+# Install with: uv sync --extra geo
+geo = [
+    "geopandas>=1.0",
+    "shapely>=2.0",
+]
+
+[dependency-groups]
+dev = [
+    "jupyterlab>=4.2",
+    "jupytext>=1.16",
+    "ipykernel>=6.29",
+    "ruff>=0.6",
+    "mypy>=1.10",
+    "pytest>=8.2",
+    "pre-commit>=3.7",
+    "nbstripout>=0.7",
+    "types-PyYAML>=6.0",
+]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["core"]
+
+[tool.uv]
+# Supply-chain policy: ignore dependency releases newer than 7 days old, so a
+# freshly-compromised release can't be pulled in before anyone notices.
+# The relative-duration form requires uv >= 0.9.17 (check `uv --version`);
+# older uv expects an absolute date instead, e.g. exclude-newer = "2026-01-01".
+exclude-newer = "7d"
+
+[tool.jupytext]
+# Pair every notebook with a plain-.py script so git diffs stay readable.
+formats = "ipynb,py:percent"
+
+[tool.ruff]
+line-length = 100
+src = ["."]
+# target-version is inferred from requires-python above.
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B", "SIM", "PD", "NPY", "RUF"]
+
+[tool.ruff.lint.isort]
+known-first-party = ["core"]
+
+[tool.mypy]
+python_version = "3.13"
+strict = true
+exclude = ['notebooks/']
+
+[[tool.mypy.overrides]]
+# Third-party libraries that don't ship complete type stubs.
+module = ["duckdb.*", "connectorx.*", "sklearn.*", "scipy.*", "statsmodels.*", "seaborn.*"]
+ignore_missing_imports = true
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-q"

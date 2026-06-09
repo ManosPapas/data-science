@@ -1,0 +1,11 @@
+# Non-secret, versioned configuration. Secrets belong in .env.
+# Per-environment overrides go in conf/config.<environment>.yaml and are deep-merged over this base.
+
+paths:
+  raw: data/raw
+  interim: data/interim
+  processed: data/processed
+  external: data/external
+
+run:
+  seed: 42

@@ -1,0 +1,19 @@
+# Connection METADATA only — never passwords. The matching secret is read from .env
+# (e.g. warehouse -> WAREHOUSE__PASSWORD). Refer to a connection by its key, e.g. get_engine("warehouse").
+
+warehouse:
+  driver: postgresql+psycopg
+  host: localhost
+  port: 5432
+  database: analytics
+  user: analyst
+  # password: from WAREHOUSE__PASSWORD in .env
+
+# Add more named connections as needed, e.g. a SQL Server source:
+# crm:
+#   driver: mssql+pyodbc
+#   host: crm-sql.internal
+#   port: 1433
+#   database: crm
+#   user: reader
+#   # password: from CRM__PASSWORD in .env

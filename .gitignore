@@ -1,0 +1,32 @@
+# --- Secrets ---
+.env
+.env.*
+!.env.example
+
+# --- Data: keep the folder structure, ignore the contents ---
+/data/**
+!/data/**/
+!/data/**/.gitkeep
+
+# --- Notebooks: commit the paired .py, never the .ipynb ---
+*.ipynb
+
+# --- Python ---
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.ipynb_checkpoints/
+
+# --- Environments ---
+.venv/
+venv/
+env/
+
+# --- OS / editor ---
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
