@@ -35,12 +35,30 @@ tomorrow, it lives in the package with a test — not in a notebook cell.
 
 - Type-hinted, with short docstrings that say *why*. `snake_case` functions/modules, `PascalCase`
   classes, `UPPER_SNAKE` constants. Functions read as verbs (`load_orders`, `compute_elasticity`).
-- **Absolute imports from the package** (`from <package>.db.query import load_orders`). Never
-  `from x import *`, never `sys.path` hacks, never `%run`.
+- **Absolute imports from the package** (`from core.db.query import load_orders`). No `sys.path`
+  hacks, no `%run`. The one sanctioned star-import is `from core.prelude import *` in notebooks
+  (curated via `__all__`); library modules never use `import *`.
 - ruff-formatted: double quotes, line length 100. Keep comments sparse and meaningful.
 - Match the surrounding code's idioms and density.
 - Notebooks read like a narrative (load → inspect → analyze → visualize) and delegate every non-trivial
   step to a named, tested function in the package.
+
+## Standardized patterns (plan first, don't sprawl)
+
+Prefer standardized, reusable units over ad-hoc functions — agree the shape before writing many of
+them. Every reusable unit is a function with a **fixed input format → a predictable output**, and
+cross-cutting boilerplate is owned by a decorator or shared base, not repeated.
+
+- **Visualization.** Every chart is a `@chart`-decorated function `f(ax, ...)` that only *draws*; the
+  decorator (`core/viz/base.py`) owns figure/axes creation, theme, title, saving, and returning the
+  `Axes` (charts compose into grids via `base.grid`). Charts take prepared data — arrays
+  (`y_true, y_score`) or a `pl.DataFrame` + columns — and live in
+  `core/viz/{eda,model,cluster,explain,timeseries}.py`.
+- **Compute ≠ present.** Heavy computation (fitting for elbow/silhouette, SHAP, PDP) lives in
+  `analytics`/`modeling`; the chart receives the result. Cheap, plot-specific math may stay in the chart.
+- **Imports.** Notebooks import the toolkit in one line — `from core.prelude import *`. Library modules
+  keep explicit per-module imports; Python caches modules in `sys.modules`, so that costs nothing at
+  runtime and keeps each module independent and type-checkable.
 
 ## Do
 
@@ -50,7 +68,7 @@ tomorrow, it lives in the package with a test — not in a notebook cell.
 - **Parameterize all SQL** — bind values (`:param`), never string-format them into the query.
 - **One typed loader per data source** (load → pin schema → return), reused everywhere.
 - **Secrets through settings**: read via a typed `Settings`/`get_settings()`, sourced from `.env`.
-- **Promote** reusable notebook code into `src/<package>/` and import it back.
+- **Promote** reusable notebook code into `core/` and import it back.
 - Cache expensive pulls to Parquet rather than re-querying.
 
 ## Don't
@@ -58,7 +76,8 @@ tomorrow, it lives in the package with a test — not in a notebook cell.
 - Don't load multi-GB CSVs straight into pandas.
 - Don't put secrets in YAML, code, or notebooks; don't commit `.env` or notebook outputs.
 - Don't build SQL by string-substituting runtime values.
-- Don't use `import *`, `sys.path` edits, or `warnings.filterwarnings('ignore')` — fix warnings instead.
+- Don't use `import *` in library code (the notebook prelude is the one exception), `sys.path` edits,
+  or `warnings.filterwarnings('ignore')` — fix warnings instead.
 - Don't pull in image/CV or deep-learning stacks; this project is tabular/text/geo.
 - Don't commit `data/` — treat it as a rebuildable cache.
 
@@ -69,19 +88,22 @@ conf/        versioned, non-secret config (YAML): config.yaml, databases.yaml, l
 data/        gitignored datasets: raw/ interim/ processed/ external/
 notebooks/   jupytext-paired exploration — commit the .py, outputs stripped
 sql/         .sql files grouped by domain; parameterized
-src/<package>/
+scripts/     one-off / dev scripts (e.g. sample-data generation)
+core/        the package (flat layout at the repo root — no src/ wrapper)
   config.py     typed settings from .env + conf/*.yaml (single get_settings entry point)
+  prelude.py    one-line notebook toolkit: from core.prelude import *
   io/           readers, writers, parquet cache (Polars/DuckDB)
   db/           pooled engines, parameterized typed query loaders
   api/          HTTP clients (retries, auth, pagination)
   features/     reusable feature engineering (e.g. temporal)
   analytics/    stats, effect sizes, CIs, experiment/A-B analysis
-  viz/          consistent plot defaults
+  viz/          base.py = @chart decorator + theme + grid; charts by group:
+                eda, model, cluster, explain, timeseries
   utils/        logging, memory profiling
-tests/       pytest, mirrors src/<package>/
+tests/       pytest, mirrors core/
 ```
 
-Organize `src/` by **capability and pipeline stage**, not by business entity. Add capability
+Organize `core/` by **capability and pipeline stage**, not by business entity. Add capability
 subpackages (e.g. `pricing/`, `forecasting/`, `churn/`) inside this structure; they reuse the shared
 `io`/`db`/`features`/`analytics` layers rather than re-implementing loaders.
 
@@ -92,7 +114,7 @@ uv sync                 # create .venv and install from the lockfile
 uv add <pkg>            # add a dependency
 uv run pytest           # tests
 uv run ruff check .     # lint   (uv run ruff format . to format)
-uv run mypy src         # types
+uv run mypy core        # types
 uv run jupyter lab      # analyze in the browser
 ```
 

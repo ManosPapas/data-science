@@ -31,10 +31,13 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-# Install with: uv sync --extra geo
+# Install extras with: uv sync --extra geo  /  --extra explain
 geo = [
     "geopandas>=1.0",
     "shapely>=2.0",
+]
+explain = [
+    "shap>=0.44",
 ]
 
 [dependency-groups]
@@ -79,6 +82,10 @@ select = ["E", "F", "I", "UP", "B", "SIM", "PD", "NPY", "RUF"]
 [tool.ruff.lint.isort]
 known-first-party = ["core"]
 
+[tool.ruff.lint.per-file-ignores]
+# Notebooks legitimately star-import the prelude and end cells with a display expression.
+"notebooks/*" = ["E402", "F403", "F405", "B018"]
+
 [tool.mypy]
 python_version = "3.13"
 strict = true
@@ -86,7 +93,15 @@ exclude = ['notebooks/']
 
 [[tool.mypy.overrides]]
 # Third-party libraries that don't ship complete type stubs.
-module = ["duckdb.*", "connectorx.*", "sklearn.*", "scipy.*", "statsmodels.*", "seaborn.*"]
+module = [
+    "duckdb.*",
+    "connectorx.*",
+    "sklearn.*",
+    "scipy.*",
+    "statsmodels.*",
+    "seaborn.*",
+    "shap.*",
+]
 ignore_missing_imports = true
 
 [tool.pytest.ini_options]
