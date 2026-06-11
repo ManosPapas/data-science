@@ -126,6 +126,14 @@ did = causal.difference_in_differences(
 print(f"DiD estimate: {did:+.3f}")
 
 # %% [markdown]
+# ## 6. The segments, interactively (Plotly)
+# Hover a point to inspect it; the PCA scatter is far more useful when it's interactive.
+
+# %%
+pca_df = pl.DataFrame({"pc1": coords[:, 0], "pc2": coords[:, 1], "cluster": labels.astype(str)})
+interactive.scatter(pca_df, "pc1", "pc2", color="cluster", title="Customer segments (PCA)")
+
+# %% [markdown]
 # **Takeaways:** four interpretable customer segments with different churn; a small, profilable
 # anomaly set; and an A/B test showing the campaign lifts retention while spend is unaffected —
 # backed by power analysis and the causal toolkit.

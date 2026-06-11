@@ -14,6 +14,7 @@ from typing import Any
 import joblib
 
 from core.config import ROOT
+from core.utils.logging import get_logger
 
 MODELS_DIR = ROOT / "models"
 
@@ -41,6 +42,7 @@ def save_model(
         **(metadata or {}),
     }
     (target / "metadata.json").write_text(json.dumps(info, indent=2, default=str), encoding="utf-8")
+    get_logger(__name__).info("saved model %s v%d -> %s", name, next_version, target)
     return target
 
 

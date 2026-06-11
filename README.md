@@ -34,6 +34,7 @@ type-hinted, tested, and importable in one line from notebooks (`from core.prelu
 | **Model** | `modeling` | 40+ models (`registry`), leakage-free `split`/`preprocess`, `train`, `tune`, `compare` (leaderboard + paired tests), `evaluate`, `ensemble`, `imbalance`, `segment` (clustering/PCA), `anomaly`, versioned `persist` |
 | **Forecast** | `forecasting` | one interface over baselines, ARIMA/SARIMAX, ETS, and ML-reduction; rolling-origin backtest |
 | **Decide** | `decision` | contextual bandits (ε-greedy, Thompson, UCB1, LinUCB) and optimization (LP, assignment) |
+| **Price** | `pricing` | demand elasticity estimation (log-log) + revenue/profit-maximizing price optimization |
 | **Measure** | `kpi` | ~30 financial KPIs, ~28 behaviour KPIs, and cost-sensitive `profit` curves |
 | **Visualize** | `viz` | a `@chart` decorator + theme + grid; static charts for EDA, models, clustering, explainability, time series — plus **interactive Plotly** charts (`viz.interactive`) |
 | **Utilities** | `utils` | memory profiling, structured logging, HTML reports |
@@ -65,7 +66,7 @@ blocks `uv.exe`). It installs the same things; you just run tools via `python -m
 python -m venv .venv
 .venv\Scripts\Activate.ps1                      # bash/macOS: source .venv/bin/activate
 python -m pip install --upgrade pip
-python -m pip install -e ".[geo,explain,excel,gam,imbalance]"
+python -m pip install -e ".[geo,explain,excel,gam,imbalance,interactive]"
 python -m pip install jupyterlab jupytext ipykernel ruff mypy pytest pre-commit nbstripout types-PyYAML
 python -m ipykernel install --user --name data-science --display-name "Python (data-science)"
 python scripts\make_sample_data.py              # build the sample datasets
@@ -153,6 +154,30 @@ models/      versioned model store (gitignored)
 (`make sync` / `make check` etc. wrap the `uv` forms — see the `Makefile`.)
 
 ---
+
+## Testing & the full pipeline
+
+```powershell
+.venv\Scripts\Activate.ps1
+
+python -m pytest                   # fast unit tests (notebooks skipped)
+python -m pytest --run-notebooks   # unit tests + every example notebook run end-to-end
+make pipeline                      # the whole gate at once (see below)
+```
+
+**`make pipeline`** is the one command that runs everything CI runs — ruff lint, format check,
+mypy, the unit suite, and all six example notebooks executed top-to-bottom (the real integration
+test). Without `make`, run the steps directly:
+
+```powershell
+python -m ruff check . ; python -m ruff format --check . ; python -m mypy core
+python scripts\make_sample_data.py            # notebooks need the sample data
+python -m pytest --run-notebooks              # unit + notebook integration tests
+```
+
+Notebook execution needs the sample data and the `interactive` extra (Plotly). **CI**
+(`.github/workflows/ci.yml`) runs the same on every push/PR as two jobs: **checks** (ruff + mypy +
+unit tests) and **notebooks** (builds data, runs all notebooks).
 
 ## Good to know
 

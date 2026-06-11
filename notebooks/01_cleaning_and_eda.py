@@ -149,6 +149,20 @@ sample_df = transform.sample(compact, n=800, seed=42)
 eda.pairplot(sample_df, ["revenue", "unit_price", "units", "discount"], hue="segment")
 
 # %% [markdown]
+# ## 7. The same EDA, interactively (Plotly)
+# `viz.interactive` mirrors the static charts with hover / zoom / pan (needs the `interactive`
+# extra — `pip install plotly`).
+
+# %%
+interactive.histogram(compact, "revenue", title="Revenue (interactive)")
+
+# %%
+interactive.scatter(compact, "unit_price", "revenue", color="segment", title="Price vs revenue")
+
+# %%
+interactive.correlation_heatmap(compact, title="Numeric correlations")
+
+# %% [markdown]
 # **Takeaways:** types fixed and memory cut via downcast; `segment` cleaned + imputed; duplicate
 # orders and revenue outliers handled; revenue is log-normal-ish and varies by segment. The clean
 # frame is cached to `data/processed/` for the feature/KPI notebook.

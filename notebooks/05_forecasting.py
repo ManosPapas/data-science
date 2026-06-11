@@ -96,8 +96,17 @@ scores
 
 # %%
 best = scores["model"][0]
+lower, upper = forecasters[best].predict_interval(horizon)  # 95% prediction interval
 fig, axes = base.grid(1, ncols=1)
-timeseries.forecast(test_dates, test_y, preds[best], ax=axes[0], title=f"28-day holdout — {best}")
+timeseries.forecast(
+    test_dates,
+    test_y,
+    preds[best],
+    lower=lower,
+    upper=upper,
+    ax=axes[0],
+    title=f"28-day holdout — {best} (95% interval)",
+)
 
 # %% [markdown]
 # ## 4. Rolling-origin backtest
@@ -127,6 +136,13 @@ bt.group_by("h").agg((pl.col("actual") - pl.col("pred")).abs().mean().round(1).a
 resid = (bt["actual"] - bt["pred"]).to_numpy()
 fig, axes = base.grid(1, ncols=1)
 timeseries.forecast_residuals(resid, ax=axes[0], title="ETS backtest residuals")
+
+# %% [markdown]
+# ## 5. The series, interactively (Plotly)
+# A range slider makes it easy to zoom into any window of the history.
+
+# %%
+interactive.time_series(daily, "date", "revenue", title="Daily revenue")
 
 # %% [markdown]
 # **Takeaways:** clear weekly seasonality and trend; ETS / seasonal-naive beat the flat baselines on

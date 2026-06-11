@@ -12,6 +12,18 @@ import numpy as np
 from numpy.typing import ArrayLike, NDArray
 
 
+def _normal_band(
+    point: NDArray[np.float64], sigma: float, alpha: float, *, grow: bool
+) -> tuple[NDArray[np.float64], NDArray[np.float64]]:
+    """Symmetric normal prediction band around ``point``; widens with horizon when ``grow``."""
+    from scipy.stats import norm
+
+    z = float(norm.ppf(1.0 - alpha / 2.0))
+    steps = np.sqrt(np.arange(1, point.size + 1)) if grow else np.ones(point.size)
+    half = z * sigma * steps
+    return point - half, point + half
+
+
 class _Baseline:
     """Naive (last value), seasonal-naive (last season), or mean forecast."""
 
@@ -32,6 +44,20 @@ class _Baseline:
             repeats = int(np.ceil(horizon / self.season_length))
             return np.asarray(np.tile(season, repeats)[:horizon], dtype=float)
         return np.full(horizon, float(self._y[-1]))
+
+    def predict_interval(
+        self, horizon: int, *, alpha: float = 0.05, x: Any = None
+    ) -> tuple[NDArray[np.float64], NDArray[np.float64]]:
+        point = self.predict(horizon)
+        if self.strategy == "mean":
+            sigma_mean = float(self._y.std(ddof=1)) if self._y.size > 1 else 0.0
+            return _normal_band(point, sigma_mean, alpha, grow=False)
+        if self.strategy == "seasonal_naive":
+            diffs = self._y[self.season_length :] - self._y[: -self.season_length]
+        else:
+            diffs = np.diff(self._y)
+        sigma = float(np.std(diffs, ddof=1)) if diffs.size > 1 else 0.0
+        return _normal_band(point, sigma, alpha, grow=True)
 
 
 class _Classical:
@@ -61,6 +87,17 @@ class _Classical:
         exog = np.asarray(x, dtype=float) if x is not None else None
         return np.asarray(self._result.forecast(horizon, exog=exog), dtype=float)
 
+    def predict_interval(
+        self, horizon: int, *, alpha: float = 0.05, x: ArrayLike | None = None
+    ) -> tuple[NDArray[np.float64], NDArray[np.float64]]:
+        if self.kind == "ets":
+            sigma = float(np.std(np.asarray(self._result.resid, dtype=float), ddof=1))
+            return _normal_band(self.predict(horizon), sigma, alpha, grow=True)
+        exog = np.asarray(x, dtype=float) if x is not None else None
+        forecast = self._result.get_forecast(horizon, exog=exog)
+        ci = np.asarray(forecast.conf_int(alpha=alpha), dtype=float)
+        return ci[:, 0], ci[:, 1]
+
 
 class _MLReduction:
     """Recursive lag-feature forecasting with any sklearn regressor."""
@@ -69,11 +106,17 @@ class _MLReduction:
         self.estimator = estimator
         self.lags = lags
         self._history: NDArray[np.float64] = np.empty(0)
+        self._sigma: float = 0.0  # in-sample residual std, set at fit time
 
     def fit(self, y: ArrayLike, x: Any = None) -> Self:
         self._history = np.asarray(y, dtype=float)
-        rows = [self._history[i - self.lags : i] for i in range(self.lags, self._history.size)]
-        self.estimator.fit(np.asarray(rows), self._history[self.lags :])
+        rows = np.asarray(
+            [self._history[i - self.lags : i] for i in range(self.lags, self._history.size)]
+        )
+        target = self._history[self.lags :]
+        self.estimator.fit(rows, target)
+        resid = target - np.asarray(self.estimator.predict(rows), dtype=float)
+        self._sigma = float(np.std(resid, ddof=1)) if resid.size > 1 else 0.0
         return self
 
     def predict(self, horizon: int, x: Any = None) -> NDArray[np.float64]:
@@ -85,6 +128,13 @@ class _MLReduction:
             forecasts.append(value)
             history.append(value)
         return np.asarray(forecasts, dtype=float)
+
+    def predict_interval(
+        self, horizon: int, *, alpha: float = 0.05, x: Any = None
+    ) -> tuple[NDArray[np.float64], NDArray[np.float64]]:
+        # sigma is the in-sample one-step residual std cached at fit time; the band widens
+        # with sqrt(horizon) — an approximation for the recursive multi-step forecast.
+        return _normal_band(self.predict(horizon), self._sigma, alpha, grow=True)
 
 
 _BASELINES = {"naive", "seasonal_naive", "mean"}

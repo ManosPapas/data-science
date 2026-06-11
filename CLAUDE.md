@@ -102,7 +102,9 @@ core/        the package (flat layout at the repo root — no src/ wrapper)
   modeling/     registry (make_model), train (fit/predict/cross-val/partial_fit), tune, ensemble,
                 imbalance, evaluate + compare, persist, split, preprocess, segment (clustering/PCA), anomaly
   decision/     contextual bandits (epsilon-greedy, Thompson, UCB, LinUCB) + optimization (LP, assignment)
-  forecasting/  classical (arima/sarimax, ets) + ml-reduction forecasters + rolling-origin backtest
+  forecasting/  classical (arima/sarimax, ets) + ml-reduction forecasters (+ prediction intervals)
+                + rolling-origin backtest
+  pricing/      demand elasticity (log-log) + price/revenue optimization (capability subpackage)
   kpi/          business KPIs: financial (revenue/economy), behaviour (GA/marketing), profit (cost-sensitive)
   viz/          base.py = @chart decorator + theme + grid; static charts by group:
                 eda, model, cluster, explain, timeseries; plus interactive (Plotly,

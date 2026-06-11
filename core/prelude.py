@@ -13,6 +13,7 @@ import pandas as pd
 import polars as pl
 import polars.selectors as cs
 
+from core import pricing
 from core.analytics import causal, experiment, stats
 from core.api.client import get_client, paginate
 from core.api.graphql import graphql, paginate_graphql
@@ -100,6 +101,7 @@ __all__ = [
     "persist",
     "pl",
     "preprocess",
+    "pricing",
     "profit",
     "query_files",
     "read_csv",

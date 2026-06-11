@@ -17,3 +17,14 @@ jobs:
       - run: uv run ruff format --check .
       - run: uv run mypy core
       - run: uv run pytest -q
+
+  notebooks:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+        with:
+          python-version: "3.13"
+      - run: uv sync --extra interactive
+      - run: uv run python scripts/make_sample_data.py
+      - run: uv run pytest --run-notebooks -m notebook -q
