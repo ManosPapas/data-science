@@ -8,7 +8,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import date, timedelta
-from typing import Any
+from typing import Any, cast
 
 import polars as pl
 
@@ -39,8 +39,7 @@ class Comparison:
 def _reference_date(df: pl.DataFrame, date_col: str, reference: date | None) -> date:
     if reference is not None:
         return reference
-    latest: date = df[date_col].max()
-    return latest
+    return cast(date, df[date_col].max())
 
 
 def _shift_months(d: date, months: int) -> date:

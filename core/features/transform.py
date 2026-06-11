@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from collections.abc import Sequence
-from typing import Any
+from typing import Any, cast
 
 import polars as pl
 
@@ -19,7 +19,7 @@ def pivot(
     df: pl.DataFrame, *, on: str, index: str | Sequence[str], values: str, agg: str = "first"
 ) -> pl.DataFrame:
     """Long -> wide: spread distinct ``on`` values into columns of ``values``."""
-    return df.pivot(on, index=index, values=values, aggregate_function=agg)
+    return df.pivot(on, index=index, values=values, aggregate_function=cast(Any, agg))
 
 
 def unpivot(df: pl.DataFrame, *, on: Sequence[str], index: str | Sequence[str]) -> pl.DataFrame:
@@ -36,7 +36,7 @@ def join(
     validate: str = "m:m",
 ) -> pl.DataFrame:
     """Join two frames with a cardinality check (e.g. ``validate='1:m'``)."""
-    return left.join(right, on=on, how=how, validate=validate)
+    return left.join(right, on=on, how=cast(Any, how), validate=cast(Any, validate))
 
 
 def discretize(
@@ -87,9 +87,8 @@ def rank(
     df: pl.DataFrame, column: str, *, method: str = "average", descending: bool = False
 ) -> pl.DataFrame:
     """Add ``<column>_rank`` ranking the column."""
-    return df.with_columns(
-        pl.col(column).rank(method=method, descending=descending).alias(f"{column}_rank")
-    )
+    ranked = pl.col(column).rank(method=cast(Any, method), descending=descending)
+    return df.with_columns(ranked.alias(f"{column}_rank"))
 
 
 def sample(
@@ -124,5 +123,5 @@ def apply_rate(
 def explode_json(df: pl.DataFrame, column: str) -> pl.DataFrame:
     """Unnest a struct column (decoding it first if it is a JSON string) into top-level columns."""
     if df[column].dtype == pl.Utf8:
-        df = df.with_columns(pl.col(column).str.json_decode())
+        df = df.with_columns(pl.col(column).str.json_decode())  # type: ignore[call-arg]
     return df.unnest(column)

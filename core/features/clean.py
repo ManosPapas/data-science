@@ -7,7 +7,7 @@ from __future__ import annotations
 
 import re
 from collections.abc import Sequence
-from typing import Any
+from typing import Any, cast
 
 import numpy as np
 import polars as pl
@@ -26,12 +26,12 @@ def standardize_columns(df: pl.DataFrame) -> pl.DataFrame:
 
 def cast_schema(df: pl.DataFrame, schema: dict[str, Any]) -> pl.DataFrame:
     """Cast columns to the given Polars dtypes (strict — raises on a bad value)."""
-    return df.cast(schema)
+    return df.cast(cast(Any, schema))
 
 
 def coerce(df: pl.DataFrame, schema: dict[str, Any]) -> pl.DataFrame:
     """Cast columns to the given dtypes, turning values that don't fit into null (non-strict)."""
-    return df.cast(schema, strict=False)
+    return df.cast(cast(Any, schema), strict=False)
 
 
 def _string_dtype(series: pl.Series) -> Any | None:
@@ -65,7 +65,7 @@ def auto_cast(df: pl.DataFrame) -> pl.DataFrame:
     schema = infer_schema(df)
     date_cols = [name for name, dtype in schema.items() if dtype == pl.Date]
     other = {name: dtype for name, dtype in schema.items() if dtype != pl.Date}
-    out = df.cast(other, strict=False) if other else df
+    out = df.cast(cast(Any, other), strict=False) if other else df
     if date_cols:
         out = out.with_columns([pl.col(name).str.to_date(strict=False) for name in date_cols])
     return out
@@ -106,14 +106,14 @@ def fill_missing(
         return df.with_columns([pl.col(col).fill_null(pl.col(col).median()) for col in cols])
     if strategy == "mode":
         return df.with_columns([pl.col(col).fill_null(pl.col(col).mode().first()) for col in cols])
-    return df.with_columns([pl.col(col).fill_null(strategy=strategy) for col in cols])
+    return df.with_columns([pl.col(col).fill_null(strategy=cast(Any, strategy)) for col in cols])
 
 
 def drop_duplicate_rows(
     df: pl.DataFrame, *, subset: Sequence[str] | None = None, keep: str = "first"
 ) -> pl.DataFrame:
     """Drop duplicate rows (optionally on a subset of columns), preserving order."""
-    return df.unique(subset=subset, keep=keep, maintain_order=True)
+    return df.unique(subset=subset, keep=cast(Any, keep), maintain_order=True)
 
 
 def drop_duplicate_columns(df: pl.DataFrame) -> pl.DataFrame:

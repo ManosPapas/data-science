@@ -11,13 +11,13 @@ import pandas as pd
 import polars as pl
 import polars.selectors as cs
 
-from core.analytics import stats
+from core.analytics import causal, experiment, stats
 from core.api.client import get_client, paginate
 from core.api.graphql import graphql, paginate_graphql
 from core.db.engine import get_engine
 from core.db.query import load_sql_file, read_sql, write_sql
-from core.decision import bandits
-from core.features import clean, period, temporal, transform, validate
+from core.decision import bandits, optimize
+from core.features import clean, geo, period, temporal, text, transform, validate
 from core.forecasting import backtest
 from core.forecasting.models import make_forecaster
 from core.io.cache import cached
@@ -33,6 +33,7 @@ from core.io.readers import (
 from core.io.writers import write_csv, write_excel, write_parquet
 from core.kpi import behaviour, financial, profit
 from core.modeling import (
+    anomaly,
     compare,
     ensemble,
     evaluate,
@@ -40,20 +41,24 @@ from core.modeling import (
     persist,
     preprocess,
     registry,
+    segment,
     split,
     train,
     tune,
 )
+from core.utils import report
 from core.utils.memory import memory_report
 from core.viz import base, cluster, conceptual, eda, explain, model, timeseries
 from core.viz.base import set_theme
 
 __all__ = [
+    "anomaly",
     "backtest",
     "bandits",
     "base",
     "behaviour",
     "cached",
+    "causal",
     "clean",
     "cluster",
     "compare",
@@ -62,8 +67,10 @@ __all__ = [
     "eda",
     "ensemble",
     "evaluate",
+    "experiment",
     "explain",
     "financial",
+    "geo",
     "get_client",
     "get_engine",
     "graphql",
@@ -73,6 +80,7 @@ __all__ = [
     "memory_report",
     "model",
     "np",
+    "optimize",
     "paginate",
     "paginate_graphql",
     "pd",
@@ -89,11 +97,14 @@ __all__ = [
     "read_parquet",
     "read_sql",
     "registry",
+    "report",
     "scan_parquet",
+    "segment",
     "set_theme",
     "split",
     "stats",
     "temporal",
+    "text",
     "timeseries",
     "train",
     "transform",

@@ -96,16 +96,16 @@ core/        the package (flat layout at the repo root — no src/ wrapper)
   io/           readers, writers, parquet cache (Polars/DuckDB)
   db/           pooled engines, parameterized typed query loaders
   api/          HTTP + GraphQL clients (auth, retries, REST & cursor pagination)
-  features/     stateless transforms: clean, transform, temporal, period (slice + MoM/QoQ/YoY), validate
-  analytics/    stats: summaries, distributions, effect sizes, tests, correlation/MI, group comparison, power
+  features/     stateless transforms: clean, transform, temporal, period (MoM/QoQ/YoY), text, geo, validate
+  analytics/    stats (summaries/distributions/effects/tests/MI/power), experiment (A/B), causal (DiD/PSM/uplift)
   modeling/     registry (make_model), train (fit/predict/cross-val/partial_fit), tune, ensemble,
-                imbalance, evaluate + compare (leaderboard + paired test), persist, split, preprocess
-  decision/     online decisioning: contextual bandits (epsilon-greedy, Thompson, UCB, LinUCB)
+                imbalance, evaluate + compare, persist, split, preprocess, segment (clustering/PCA), anomaly
+  decision/     contextual bandits (epsilon-greedy, Thompson, UCB, LinUCB) + optimization (LP, assignment)
   forecasting/  classical (arima/sarimax, ets) + ml-reduction forecasters + rolling-origin backtest
   kpi/          business KPIs: financial (revenue/economy), behaviour (GA/marketing), profit (cost-sensitive)
   viz/          base.py = @chart decorator + theme + grid; charts by group:
                 eda, model, cluster, explain, timeseries
-  utils/        memory profiling
+  utils/        memory profiling, structured logging, HTML report
 tests/       pytest, mirrors core/
 ```
 

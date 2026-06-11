@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from typing import Any, cast
+
 import polars as pl
 from sqlalchemy import text
 
@@ -34,4 +36,4 @@ def read_sql(
 
 def write_sql(df: pl.DataFrame, table: str, conn: str, *, if_exists: str = "append") -> None:
     """Write a Polars frame to ``table`` on the named connection (append / replace / fail)."""
-    df.write_database(table, get_engine(conn), if_table_exists=if_exists)
+    df.write_database(table, get_engine(conn), if_table_exists=cast(Any, if_exists))

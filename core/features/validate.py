@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from collections.abc import Mapping, Sequence
+from typing import Any
 
 import polars as pl
 
@@ -35,7 +36,8 @@ def check_schema(
     for col, (lo, hi) in (ranges or {}).items():
         if col not in columns:
             continue
-        minimum, maximum = df[col].min(), df[col].max()
+        minimum: Any = df[col].min()
+        maximum: Any = df[col].max()
         if minimum is not None and float(minimum) < lo:
             problems.append(f"{col} below minimum {lo} (saw {minimum})")
         if maximum is not None and float(maximum) > hi:

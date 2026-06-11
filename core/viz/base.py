@@ -47,7 +47,7 @@ def chart(
             **kwargs: object,
         ) -> Axes:
             if ax is None:
-                ax = cast(Axes, plt.subplots(figsize=figsize)[1])
+                ax = plt.subplots(figsize=figsize)[1]
             draw(ax, *args, **kwargs)
             if title:
                 ax.set_title(title)
