@@ -95,7 +95,7 @@ core/        the package (flat layout at the repo root — no src/ wrapper)
   prelude.py    one-line notebook toolkit: from core.prelude import *
   io/           readers, writers, parquet cache (Polars/DuckDB)
   db/           pooled engines, parameterized typed query loaders
-  api/          HTTP clients (retries, auth, pagination)
+  api/          HTTP + GraphQL clients (auth, retries, REST & cursor pagination)
   features/     stateless transforms: clean, transform, temporal, validate (frame in, frame out)
   analytics/    stats: summary, missingness, correlation, effect sizes, CIs, tests
   modeling/     registry (make_model), train (fit/predict/cross-val/partial_fit), tune, ensemble,

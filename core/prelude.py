@@ -13,6 +13,7 @@ import polars.selectors as cs
 
 from core.analytics import stats
 from core.api.client import get_client, paginate
+from core.api.graphql import graphql, paginate_graphql
 from core.db.engine import get_engine
 from core.db.query import load_sql_file, read_sql, write_sql
 from core.decision import bandits
@@ -63,6 +64,7 @@ __all__ = [
     "explain",
     "get_client",
     "get_engine",
+    "graphql",
     "imbalance",
     "kpi",
     "load_sql_file",
@@ -71,6 +73,7 @@ __all__ = [
     "model",
     "np",
     "paginate",
+    "paginate_graphql",
     "pd",
     "persist",
     "pl",
