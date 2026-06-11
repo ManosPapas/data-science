@@ -78,7 +78,8 @@ cross-cutting boilerplate is owned by a decorator or shared base, not repeated.
 - Don't put secrets in YAML, code, or notebooks; don't commit `.env` or notebook outputs.
 - Don't build SQL by string-substituting runtime values.
 - Don't use `import *` in library code (the notebook prelude is the one exception), `sys.path` edits,
-  or `warnings.filterwarnings('ignore')` — fix warnings instead.
+  or `warnings.filterwarnings('ignore')` in library code — fix warnings instead. (The notebook
+  prelude suppresses warnings for the interactive layer; library modules and tests must not.)
 - Don't pull in image/CV or deep-learning stacks; this project is tabular/text/geo.
 - Don't commit `data/` — treat it as a rebuildable cache.
 
@@ -103,8 +104,9 @@ core/        the package (flat layout at the repo root — no src/ wrapper)
   decision/     contextual bandits (epsilon-greedy, Thompson, UCB, LinUCB) + optimization (LP, assignment)
   forecasting/  classical (arima/sarimax, ets) + ml-reduction forecasters + rolling-origin backtest
   kpi/          business KPIs: financial (revenue/economy), behaviour (GA/marketing), profit (cost-sensitive)
-  viz/          base.py = @chart decorator + theme + grid; charts by group:
-                eda, model, cluster, explain, timeseries
+  viz/          base.py = @chart decorator + theme + grid; static charts by group:
+                eda, model, cluster, explain, timeseries; plus interactive (Plotly,
+                @interactive_chart): interactive
   utils/        memory profiling, structured logging, HTML report
 tests/       pytest, mirrors core/
 ```

@@ -52,7 +52,7 @@ def permutation_importance(
     ax.set(xlabel="importance (mean decrease)", ylabel="")
 
 
-@chart()
+@chart(title="Partial dependence")
 def partial_dependence(
     ax: Axes, estimator: Any, X: Any, features: Sequence[int | str], *, kind: str = "average"
 ) -> None:

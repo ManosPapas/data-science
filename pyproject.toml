@@ -54,6 +54,9 @@ gam = [
 imbalance = [
     "imbalanced-learn>=0.12",
 ]
+interactive = [
+    "plotly>=5.0",
+]
 
 [dependency-groups]
 dev = [
@@ -123,6 +126,7 @@ module = [
     "pygam.*",
     "imblearn.*",
     "pandas.*",
+    "plotly.*",
 ]
 ignore_missing_imports = true
 

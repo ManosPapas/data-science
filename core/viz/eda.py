@@ -22,7 +22,7 @@ from core.analytics import stats
 from core.viz.base import chart
 
 
-@chart()
+@chart(title="Distribution")
 def histogram(ax: Axes, values: ArrayLike, *, bins: int = 30, kde: bool = True) -> None:
     """Histogram (optionally with a KDE overlay) of a 1-D numeric sample."""
     sns.histplot(x=np.asarray(values, dtype=float), bins=bins, kde=kde, ax=ax)
@@ -42,6 +42,7 @@ def ecdf(ax: Axes, sample: ArrayLike) -> None:
 def scatter(ax: Axes, df: pl.DataFrame, x: str, y: str, *, hue: str | None = None) -> None:
     """Scatter of ``y`` against ``x``, optionally coloured by the categorical ``hue``."""
     sns.scatterplot(data=df.to_pandas(), x=x, y=y, hue=hue, ax=ax, alpha=0.6, edgecolor="none")
+    ax.set_title(f"{y} vs {x}")
 
 
 @chart()
@@ -49,6 +50,7 @@ def boxplot_by(ax: Axes, df: pl.DataFrame, value: str, group: str) -> None:
     """Box plot of ``value`` split by the categorical ``group``."""
     pdf = df.select(group, value).to_pandas()
     sns.boxplot(data=pdf, x=group, y=value, ax=ax)
+    ax.set_title(f"{value} by {group}")
 
 
 @chart()
@@ -57,6 +59,7 @@ def count_bar(ax: Axes, df: pl.DataFrame, column: str) -> None:
     counts = df[column].value_counts(sort=True).to_pandas()
     sns.barplot(data=counts, x=column, y="count", ax=ax)
     ax.tick_params(axis="x", rotation=45)
+    ax.set_title(f"{column} counts")
 
 
 @chart(title="Cross-tab")

@@ -21,6 +21,14 @@ def test_drop_duplicate_rows() -> None:
     assert clean.drop_duplicate_rows(pl.DataFrame({"x": [1, 1, 2]})).height == 2
 
 
+def test_auto_cast_parses_dates_without_choking_on_text() -> None:
+    df = pl.DataFrame({"d": ["2024-01-01", "2024-06-15"], "kind": ["x", "y"], "n": ["1", "2"]})
+    out = clean.auto_cast(df)
+    assert out["d"].dtype == pl.Date
+    assert out["n"].dtype == pl.Int64
+    assert out["kind"].dtype == pl.Categorical  # non-date text must not raise ComputeError
+
+
 def test_month_over_month() -> None:
     from datetime import date
 
