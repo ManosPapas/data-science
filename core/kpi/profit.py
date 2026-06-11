@@ -1,6 +1,6 @@
-"""Commercial KPIs — turn binary predictions into money via a cost/benefit matrix.
+"""Profit / cost KPIs — turn binary predictions into money via a cost/benefit matrix.
 
-``costs`` is a mapping of per-cell values, e.g. for fraud:
+``costs`` maps per-cell values, e.g. for fraud:
 ``{"tp": 0, "fp": -10, "tn": 0, "fn": -500}`` (a missed fraud costs far more than an investigation).
 """
 

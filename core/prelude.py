@@ -17,7 +17,7 @@ from core.api.graphql import graphql, paginate_graphql
 from core.db.engine import get_engine
 from core.db.query import load_sql_file, read_sql, write_sql
 from core.decision import bandits
-from core.features import clean, temporal, transform, validate
+from core.features import clean, period, temporal, transform, validate
 from core.forecasting import backtest
 from core.forecasting.models import make_forecaster
 from core.io.cache import cached
@@ -31,12 +31,12 @@ from core.io.readers import (
     scan_parquet,
 )
 from core.io.writers import write_csv, write_excel, write_parquet
+from core.kpi import behaviour, financial, profit
 from core.modeling import (
     compare,
     ensemble,
     evaluate,
     imbalance,
-    kpi,
     persist,
     preprocess,
     registry,
@@ -52,6 +52,7 @@ __all__ = [
     "backtest",
     "bandits",
     "base",
+    "behaviour",
     "cached",
     "clean",
     "cluster",
@@ -62,11 +63,11 @@ __all__ = [
     "ensemble",
     "evaluate",
     "explain",
+    "financial",
     "get_client",
     "get_engine",
     "graphql",
     "imbalance",
-    "kpi",
     "load_sql_file",
     "make_forecaster",
     "memory_report",
@@ -75,9 +76,11 @@ __all__ = [
     "paginate",
     "paginate_graphql",
     "pd",
+    "period",
     "persist",
     "pl",
     "preprocess",
+    "profit",
     "query_files",
     "read_csv",
     "read_excel",
