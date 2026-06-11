@@ -45,22 +45,29 @@ See the runnable [example notebooks](#example-notebooks) for these in action end
 
 ## Install
 
-Requires **Python 3.13+**. Two supported paths:
+Requires **Python 3.13+**. Pick one — both install *everything* (deps + all extras + dev tools):
 
-### Option A — `uv` (recommended)
+### With `uv` — one command
 
-[`uv`](https://docs.astral.sh/uv/) gives a committed lockfile and a supply-chain release-age gate.
+[`uv`](https://docs.astral.sh/uv/) gives a committed lockfile and a 7-day supply-chain gate.
 
 ```bash
-uv sync --all-extras          # create .venv and install everything (deps + extras + dev tools)
-uv run python scripts/make_sample_data.py   # build the sample datasets
-uv run python -m jupyterlab   # analyze in the browser
+uv sync --all-extras                         # .venv + all deps, extras, and dev tools
+uv run python scripts/make_sample_data.py    # build the sample datasets
 ```
 
-### Option B — plain `venv` + `pip`
+### Without `uv` — one-command bootstrap
 
-Use this if `uv` can't run in your environment (e.g. a locked-down Windows machine where AppLocker
-blocks `uv.exe`). It installs the same things; you just run tools via `python -m …`.
+No `uv` (e.g. a locked-down Windows box where AppLocker blocks `uv.exe`)? One script does the whole
+setup — creates `.venv`, installs the package + all extras + dev tools, registers the
+**`Python (data-science)`** Jupyter kernel, and builds the sample data. It uses `python -m`
+throughout, so it's AppLocker-safe:
+
+```powershell
+python scripts/bootstrap.py        # run with any Python 3.13+
+```
+
+<details><summary>…or run the same steps by hand</summary>
 
 ```powershell
 python -m venv .venv
@@ -69,15 +76,11 @@ python -m pip install --upgrade pip
 python -m pip install -e ".[geo,explain,excel,gam,imbalance,interactive]"
 python -m pip install jupyterlab jupytext ipykernel ruff mypy pytest pre-commit nbstripout types-PyYAML
 python -m ipykernel install --user --name data-science --display-name "Python (data-science)"
-python scripts\make_sample_data.py              # build the sample datasets
-python -m jupyterlab                            # analyze in the browser
+python scripts\make_sample_data.py
 ```
+</details>
 
-> On a locked-down machine the pip-generated `.exe` shims (`jupyter`, `mypy`, `pytest`) may be
-> blocked, while the venv's `python.exe` is not — so always invoke tools as `python -m <tool>`
-> (e.g. `python -m jupyterlab`, `python -m pytest`). See [Good to know](#good-to-know).
-
-Confirm it worked: `python -c "import core; print('ok')"`.
+Confirm it worked: `python -c "import core; print('ok')"`, then **[run the notebooks](#quickstart)**.
 
 ---
 
