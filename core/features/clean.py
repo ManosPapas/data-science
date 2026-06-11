@@ -42,8 +42,11 @@ def _string_dtype(series: pl.Series) -> Any | None:
         return pl.Int64
     if non_null.cast(pl.Float64, strict=False).null_count() == 0:
         return pl.Float64
-    if non_null.str.to_date(strict=False).null_count() == 0:
-        return pl.Date
+    try:
+        if non_null.str.to_date(strict=False).null_count() == 0:
+            return pl.Date
+    except pl.exceptions.ComputeError:
+        pass  # no inferable date format — not a date column, fall through
     if non_null.n_unique() <= max(20, int(0.05 * non_null.len())):
         return pl.Categorical
     return None
