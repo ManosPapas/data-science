@@ -138,13 +138,6 @@ fig, axes = base.grid(1, ncols=1)
 timeseries.forecast_residuals(resid, ax=axes[0], title="ETS backtest residuals")
 
 # %% [markdown]
-# ## 5. The series, interactively (Plotly)
-# A range slider makes it easy to zoom into any window of the history.
-
-# %%
-interactive.time_series(daily, "date", "revenue", title="Daily revenue")
-
-# %% [markdown]
 # **Takeaways:** clear weekly seasonality and trend; ETS / seasonal-naive beat the flat baselines on
 # the holdout; and the rolling-origin backtest shows error rising with horizon — the number to quote
 # when committing to a forecast.

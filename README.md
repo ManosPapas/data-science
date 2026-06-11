@@ -175,9 +175,9 @@ python scripts\make_sample_data.py            # notebooks need the sample data
 python -m pytest --run-notebooks              # unit + notebook integration tests
 ```
 
-Notebook execution needs the sample data and the `interactive` extra (Plotly). **CI**
-(`.github/workflows/ci.yml`) runs the same on every push/PR as two jobs: **checks** (ruff + mypy +
-unit tests) and **notebooks** (builds data, runs all notebooks).
+Notebook execution needs the sample data and the `interactive` extra (Plotly). There's no online CI
+by design — run `make pipeline` (or the commands above) locally after a change to confirm nothing
+broke.
 
 ## Good to know
 

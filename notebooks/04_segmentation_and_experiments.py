@@ -54,9 +54,8 @@ cluster.silhouette(k_sil, sils, ax=axes[1], title="Silhouette")
 km = segment.make_clusterer("kmeans", n_clusters=4, n_init=10, random_state=42)
 labels = km.fit_predict(features_x)
 coords, evr = segment.pca(features_x, n_components=2)
-fig, axes = base.grid(2)
-cluster.cluster_scatter(coords, labels, ax=axes[0], title="Customer segments (PCA)")
-cluster.explained_variance(evr, ax=axes[1], title="PCA explained variance")
+fig, axes = base.grid(1, ncols=1)
+cluster.explained_variance(evr, ax=axes[0], title="PCA explained variance")
 
 # %%
 # Profile the segments — who are they, and which churns most?

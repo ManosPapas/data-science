@@ -138,26 +138,19 @@ print("normality (D'Agostino):", stats.normality_test(log_revenue, method="dagos
 # ## 6. Explore — relationships across categories
 
 # %%
-fig, axes = base.grid(4, ncols=2)
+fig, axes = base.grid(3, ncols=3)
 eda.count_bar(compact, "segment", ax=axes[0], title="Orders by segment")
 eda.boxplot_by(compact, "revenue", "segment", ax=axes[1], title="Revenue by segment")
 eda.crosstab_heatmap(compact, "region", "segment", ax=axes[2], title="Region x Segment")
-eda.correlation_heatmap(compact, ax=axes[3], title="Numeric correlations")
 
 # %%
 sample_df = transform.sample(compact, n=800, seed=42)
 eda.pairplot(sample_df, ["revenue", "unit_price", "units", "discount"], hue="segment")
 
 # %% [markdown]
-# ## 7. The same EDA, interactively (Plotly)
-# `viz.interactive` mirrors the static charts with hover / zoom / pan (needs the `interactive`
-# extra — `pip install plotly`).
-
-# %%
-interactive.histogram(compact, "revenue", title="Revenue (interactive)")
-
-# %%
-interactive.scatter(compact, "unit_price", "revenue", color="segment", title="Price vs revenue")
+# ## 7. The correlation heatmap, interactively (Plotly)
+# Rendered with Plotly instead of matplotlib — hover for exact values, zoom, pan. (Needs the
+# `interactive` extra — `pip install plotly`.)
 
 # %%
 interactive.correlation_heatmap(compact, title="Numeric correlations")
