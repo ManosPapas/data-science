@@ -98,7 +98,10 @@ core/        the package (flat layout at the repo root — no src/ wrapper)
   api/          HTTP clients (retries, auth, pagination)
   features/     stateless transforms: clean, transform, temporal, validate (frame in, frame out)
   analytics/    stats: summary, missingness, correlation, effect sizes, CIs, tests
-  modeling/     leakage-aware ML prep: split (incl. time-based), preprocess (sklearn pipelines)
+  modeling/     registry (make_model), train (fit/predict/cross-val/partial_fit), tune, ensemble,
+                imbalance, evaluate + kpi + compare (leaderboard + paired test), persist, split, preprocess
+  decision/     online decisioning: contextual bandits (epsilon-greedy, Thompson, UCB, LinUCB)
+  forecasting/  classical (arima/sarimax, ets) + ml-reduction forecasters + rolling-origin backtest
   viz/          base.py = @chart decorator + theme + grid; charts by group:
                 eda, model, cluster, explain, timeseries
   utils/        memory profiling

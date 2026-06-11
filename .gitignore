@@ -4,6 +4,9 @@
 !.env.example
 conf/*.local.yaml
 
+# --- Model store (artifacts) ---
+models/
+
 # --- Data: keep the folder structure, ignore the contents ---
 /data/**
 !/data/**/

@@ -15,7 +15,10 @@ from core.analytics import stats
 from core.api.client import get_client, paginate
 from core.db.engine import get_engine
 from core.db.query import load_sql_file, read_sql, write_sql
+from core.decision import bandits
 from core.features import clean, temporal, transform, validate
+from core.forecasting import backtest
+from core.forecasting.models import make_forecaster
 from core.io.cache import cached
 from core.io.readers import (
     query_files,
@@ -27,28 +30,49 @@ from core.io.readers import (
     scan_parquet,
 )
 from core.io.writers import write_csv, write_excel, write_parquet
-from core.modeling import preprocess, split
+from core.modeling import (
+    compare,
+    ensemble,
+    evaluate,
+    imbalance,
+    kpi,
+    persist,
+    preprocess,
+    registry,
+    split,
+    train,
+    tune,
+)
 from core.utils.memory import memory_report
 from core.viz import base, cluster, conceptual, eda, explain, model, timeseries
 from core.viz.base import set_theme
 
 __all__ = [
+    "backtest",
+    "bandits",
     "base",
     "cached",
     "clean",
     "cluster",
+    "compare",
     "conceptual",
     "cs",
     "eda",
+    "ensemble",
+    "evaluate",
     "explain",
     "get_client",
     "get_engine",
+    "imbalance",
+    "kpi",
     "load_sql_file",
+    "make_forecaster",
     "memory_report",
     "model",
     "np",
     "paginate",
     "pd",
+    "persist",
     "pl",
     "preprocess",
     "query_files",
@@ -58,13 +82,16 @@ __all__ = [
     "read_ndjson",
     "read_parquet",
     "read_sql",
+    "registry",
     "scan_parquet",
     "set_theme",
     "split",
     "stats",
     "temporal",
     "timeseries",
+    "train",
     "transform",
+    "tune",
     "validate",
     "write_csv",
     "write_excel",

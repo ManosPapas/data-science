@@ -262,3 +262,13 @@ def _score_band(ax: Axes, x: ArrayLike, scores: ArrayLike, label: str) -> None:
     std = matrix.std(axis=1)
     line = ax.plot(x, mean, marker="o", label=label)[0]
     ax.fill_between(x, mean - std, mean + std, alpha=0.15, color=line.get_color())
+
+
+@chart(title="Model comparison")
+def model_comparison(ax: Axes, scores_by_model: dict[str, ArrayLike]) -> None:
+    """Box plot of per-fold scores per model — overlap means no real difference."""
+    labels = list(scores_by_model)
+    data = [np.asarray(scores_by_model[name], dtype=float) for name in labels]
+    ax.boxplot(data)
+    ax.set_xticks(range(1, len(labels) + 1), labels=labels)
+    ax.set(ylabel="fold score")
