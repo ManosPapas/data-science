@@ -54,7 +54,7 @@ Requires **Python 3.13+**. Two supported paths:
 ```bash
 uv sync --all-extras          # create .venv and install everything (deps + extras + dev tools)
 uv run python scripts/make_sample_data.py   # build the sample datasets
-uv run jupyter lab            # analyze in the browser
+uv run python -m jupyterlab   # analyze in the browser
 ```
 
 ### Option B — plain `venv` + `pip`
@@ -84,17 +84,26 @@ Confirm it worked: `python -c "import core; print('ok')"`.
 ## Quickstart
 
 1. **Install** (above) and **generate the sample data**: `python scripts/make_sample_data.py`
-   → writes `data/raw/{transactions.csv, customers.parquet, daily_sales.parquet}` (seeded, so it's
+   → writes `data/raw/{transactions.csv, customers.parquet, daily_sales.parquet}` (seeded and
    reproducible; `data/` is a gitignored, rebuildable cache).
-2. **Open JupyterLab**, pick the **`Python (data-science)`** kernel, and run the example notebooks
-   **in order** (notebook 01 caches a clean frame that 02 reads).
-3. In any notebook, `from core.prelude import *` gives you the whole toolkit.
+2. **Launch JupyterLab in your browser** — activate the venv, then start it with `python -m`:
+   ```powershell
+   .venv\Scripts\Activate.ps1
+   python -m jupyterlab        # opens http://localhost:8888/lab; the left sidebar is the file browser
+   ```
+   Use `python -m jupyterlab`, **not** `jupyter lab` (see [Good to know](#good-to-know)). `Ctrl+C`
+   twice in the terminal stops the server. On a fresh clone the paired `.ipynb` files don't exist
+   yet — create them with `python -m jupytext --to notebook notebooks/*.py`, or right-click a `.py`
+   → *Open With → Jupytext Notebook*.
+3. Open `notebooks/01_cleaning_and_eda.ipynb`, pick the **`Python (data-science)`** kernel, **Run
+   All**, and work through them **in order** (01 caches a clean frame that 02 reads). In any cell,
+   `from core.prelude import *` gives you the whole toolkit.
 
 ---
 
 ## Example notebooks
 
-Five end-to-end notebooks under `notebooks/`, each a `load → inspect → analyze → visualize`
+Six end-to-end notebooks under `notebooks/`, each a `load → inspect → analyze → visualize`
 narrative that delegates every non-trivial step to a tested `core` function:
 
 | Notebook | Demonstrates |
@@ -104,6 +113,11 @@ narrative that delegates every non-trivial step to a tested `core` function:
 | `03_churn_modeling` | Stratified split → leakage-free pipelines → multi-model leaderboard + paired test → held-out evaluation → **profit-based threshold** → explainability → versioned save |
 | `04_segmentation_and_experiments` | k-means (elbow/silhouette) + PCA, anomaly detection, an A/B test with power analysis, and a causal cross-check |
 | `05_forecasting` | Decomposition/ACF/PACF → time features → forecaster bake-off on a holdout → rolling-origin backtest |
+| `06_scale_lazy_duckdb` | The headline GB-scale path: lazy Polars scan-with-pushdown + DuckDB SQL straight over Parquet/CSV (out-of-core) |
+
+Notebooks **01** and **04** also render a couple of charts with interactive **Plotly**
+(`viz.interactive`) instead of matplotlib — a deliberate mix, to show both options without
+duplicating any chart.
 
 ---
 
@@ -144,7 +158,7 @@ models/      versioned model store (gitignored)
 
 | Task | `uv` | plain venv |
 |---|---|---|
-| Notebooks | `uv run jupyter lab` | `python -m jupyterlab` |
+| Notebooks (browser) | `uv run python -m jupyterlab` | `python -m jupyterlab` |
 | Build sample data | `uv run python scripts/make_sample_data.py` | `python scripts/make_sample_data.py` |
 | Tests | `uv run pytest` | `python -m pytest` |
 | Lint / format | `uv run ruff check .` / `ruff format .` | `python -m ruff check .` / `python -m ruff format .` |
@@ -182,9 +196,13 @@ broke.
 ## Good to know
 
 - **Run tools via `python -m` on locked-down machines.** AppLocker (common on managed Windows)
-  blocks third-party `.exe`s from user directories — that includes `uv.exe` and the pip-generated
-  `jupyter`/`mypy`/`pytest` shims, but **not** the venv's signed `python.exe`. `python -m <tool>`
-  always works. To get real `uv` back, have IT allow-list it or install it into an allowed path.
+  blocks third-party `.exe`s from user directories — including the venv's pip-generated
+  `jupyter`/`mypy`/`pytest` shims, but **not** the venv's signed `python.exe`. So launch Lab with
+  `python -m jupyterlab` (even `uv run jupyter lab` invokes the blocked shim), and run tools as
+  `python -m <tool>` (or `uv run …`). `uv` itself works once it lives in an allowed path — e.g.
+  `pip install uv` into the Program Files Python so `uv.exe` lands in its (allowed) `Scripts\`.
+- **PowerShell execution policy:** if `.venv\Scripts\Activate.ps1` is blocked, run once
+  `Set-ExecutionPolicy -Scope CurrentUser RemoteSigned`, then re-activate.
 - **Pick the right Jupyter kernel.** A fresh `.ipynb` may open on the system `python3` kernel, which
   doesn't have `core` (→ `ModuleNotFoundError: No module named 'core'`). Switch to
   **`Python (data-science)`** (top-right kernel name → Change Kernel) and save.
