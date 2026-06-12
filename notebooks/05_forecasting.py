@@ -96,7 +96,7 @@ scores
 
 # %%
 best = scores["model"][0]
-lower, upper = forecasters[best].predict_interval(horizon)  # 95% prediction interval
+lower, upper = forecasters[best].predict_interval(horizon, point=preds[best])  # 95% interval
 fig, axes = base.grid(1, ncols=1)
 timeseries.forecast(
     test_dates,

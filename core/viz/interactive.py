@@ -11,6 +11,7 @@ imported lazily, so this module loads even without it — only *calling* a chart
 from __future__ import annotations
 
 import functools
+import inspect
 from collections.abc import Callable, Sequence
 from typing import Any
 
@@ -69,6 +70,15 @@ def interactive_chart(draw: Callable[..., Any]) -> Callable[..., Any]:
             _write(fig, save)
         return fig
 
+    # publish the real calling convention (draw params + injected keywords) for Jupyter help
+    keyword = inspect.Parameter.KEYWORD_ONLY
+    own = list(inspect.signature(draw).parameters.values())
+    injected = [
+        inspect.Parameter("title", keyword, default=None),
+        inspect.Parameter("grid", keyword, default=False),
+        inspect.Parameter("save", keyword, default=None),
+    ]
+    setattr(wrapper, "__signature__", inspect.Signature(own + injected))  # noqa: B010
     return wrapper
 
 

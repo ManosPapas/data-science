@@ -20,7 +20,7 @@ type-hinted, tested, and importable in one line from notebooks (`from core.prelu
 
 | Area | Module | What you get |
 |---|---|---|
-| **Read data** | `io` | Lazy/eager readers (Parquet, CSV, JSON, NDJSON, Excel), DuckDB SQL over files, a `@cached` Parquet loader cache |
+| **Read data** | `io` | Lazy/eager readers (Parquet, CSV, JSON, NDJSON, Excel), DuckDB SQL over files, a `@cached` Parquet loader cache, and a typed source `catalog` (pinned schemas) |
 | | `db` | Pooled SQLAlchemy engines from named connections; **parameterized** SQL loaders (`read_sql`/`write_sql`) |
 | | `api` | httpx clients (auth + retries), REST pagination, and GraphQL (queries + Relay cursor pagination) |
 | **Prepare** | `features.clean` | dtype inference/fix, fill missing, dedupe, winsorize, text cleanup, downcast for memory |
@@ -29,9 +29,9 @@ type-hinted, tested, and importable in one line from notebooks (`from core.prelu
 | | `features.period` | rolling windows (7/28/30/60/90/120d…) + period-over-period (WoW/MoM/QoQ/YoY) |
 | | `features.validate` / `text` / `geo` | schema checks · normalize/TF-IDF · haversine/bounding-box |
 | **Analyze** | `analytics.stats` | summaries, distributions, hypothesis tests, effect sizes, mutual information, power |
-| | `analytics.experiment` | A/B analysis for means and conversions (lift, CI, verdict) |
+| | `analytics.experiment` | A/B analysis for means and conversions (lift, CI, verdict), SRM check, CUPED variance reduction, always-valid mSPRT (safe peeking) |
 | | `analytics.causal` | difference-in-differences, uplift, propensity scores + matching |
-| **Model** | `modeling` | 40+ models (`registry`), leakage-free `split`/`preprocess`, `train`, `tune`, `compare` (leaderboard + paired tests), `evaluate`, `ensemble`, `imbalance`, `segment` (clustering/PCA), `anomaly`, versioned `persist` |
+| **Model** | `modeling` | 40+ models (`registry`), leakage-free `split`/`preprocess`, `train`, `tune`, `compare` (leaderboard + paired tests), `evaluate`, `ensemble`, `imbalance`, `segment` (clustering/PCA), `anomaly`, drift `monitor` (PSI/KS), versioned `persist` |
 | **Forecast** | `forecasting` | one interface over baselines, ARIMA/SARIMAX, ETS, and ML-reduction; rolling-origin backtest |
 | **Decide** | `decision` | contextual bandits (ε-greedy, Thompson, UCB1, LinUCB) and optimization (LP, assignment) |
 | **Price** | `pricing` | demand elasticity estimation (log-log) + revenue/profit-maximizing price optimization |
@@ -61,7 +61,8 @@ uv run python scripts/make_sample_data.py    # build the sample datasets
 No `uv` (e.g. a locked-down Windows box where AppLocker blocks `uv.exe`)? One script does the whole
 setup — creates `.venv`, installs the package + all extras + dev tools, registers the
 **`Python (data-science)`** Jupyter kernel, and builds the sample data. It uses `python -m`
-throughout, so it's AppLocker-safe:
+throughout, so it's AppLocker-safe. (Note: this path installs the *latest* matching versions with
+pip — only the `uv` path gets the lockfile and the 7-day release-age gate.)
 
 ```powershell
 python scripts/bootstrap.py        # run with any Python 3.13+
@@ -120,7 +121,8 @@ narrative that delegates every non-trivial step to a tested `core` function:
 
 Notebooks **01** and **04** also render a couple of charts with interactive **Plotly**
 (`viz.interactive`) instead of matplotlib — a deliberate mix, to show both options without
-duplicating any chart.
+duplicating any chart. Start a new analysis by copying **`notebooks/_template.py`** (the
+load → inspect → analyze → visualize skeleton).
 
 ---
 
@@ -182,14 +184,15 @@ python -m pytest --run-notebooks   # unit tests + every example notebook run end
 make pipeline                      # the whole gate at once (see below)
 ```
 
-**`make pipeline`** is the one command that runs everything CI runs — ruff lint, format check,
+**`make pipeline`** is the one command that runs the whole local gate — ruff lint, format check,
 mypy, the unit suite, and all six example notebooks executed top-to-bottom (the real integration
 test). Without `make`, run the steps directly:
 
 ```powershell
 python -m ruff check . ; python -m ruff format --check . ; python -m mypy core
-python scripts\make_sample_data.py            # notebooks need the sample data
-python -m pytest --run-notebooks              # unit + notebook integration tests
+python -m pytest -q --cov=core --cov-fail-under=55   # unit tests + coverage floor
+python scripts\make_sample_data.py                   # notebooks need the sample data
+python -m pytest --run-notebooks -m notebook -q      # every notebook end-to-end
 ```
 
 Notebook execution needs the sample data and the `interactive` extra (Plotly). There's no online CI

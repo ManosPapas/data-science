@@ -22,6 +22,18 @@ def test_markup_price() -> None:
         optimize.markup_price(-0.5, 10.0)
 
 
+def test_fit_demand_needs_price_variation(rng: np.random.Generator) -> None:
+    with pytest.raises(ValueError, match="distinct prices"):
+        elasticity.fit_demand(np.full(50, 9.99), rng.uniform(10.0, 20.0, 50))
+
+
+def test_optimal_price_rejects_bad_candidates() -> None:
+    with pytest.raises(ValueError, match="strictly positive"):
+        optimize.optimal_price(8.0, -2.0, np.linspace(0.0, 50.0, 11))  # p=0 -> inf demand
+    with pytest.raises(ValueError, match="strictly positive"):
+        optimize.optimal_price(8.0, -2.0, np.array([]))
+
+
 def test_optimal_price_in_range() -> None:
     candidates = np.linspace(11.0, 40.0, 100)
     price, profit = optimize.optimal_price(8.0, -2.0, candidates, unit_cost=10.0)

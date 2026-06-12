@@ -23,16 +23,17 @@ check-local: ## lint + types + tests without uv (python -m; for locked-down mach
 	python -m pytest -q
 
 test-notebooks: ## end-to-end: run every example notebook (builds sample data first)
-	uv sync --extra interactive
+	uv sync --all-extras
 	uv run python scripts/make_sample_data.py
 	uv run pytest --run-notebooks -m notebook -q
 
-pipeline: ## full local pipeline — lint, format, types, ALL tests incl. notebooks (activate .venv first)
+pipeline: ## full local gate — lint, format, types, unit tests + coverage floor, all notebooks
 	python -m ruff check .
 	python -m ruff format --check .
 	python -m mypy core
+	python -m pytest -q --cov=core --cov-report=term-missing:skip-covered --cov-fail-under=55
 	python scripts/make_sample_data.py
-	python -m pytest --run-notebooks -q
+	python -m pytest --run-notebooks -m notebook -q
 
 lab:         ## launch JupyterLab in the browser
 	uv run jupyter lab

@@ -23,6 +23,7 @@ from core.decision import bandits, optimize
 from core.features import clean, geo, period, temporal, text, transform, validate
 from core.forecasting import backtest
 from core.forecasting.models import make_forecaster
+from core.io import catalog
 from core.io.cache import cached
 from core.io.readers import (
     query_files,
@@ -41,6 +42,7 @@ from core.modeling import (
     ensemble,
     evaluate,
     imbalance,
+    monitor,
     persist,
     preprocess,
     registry,
@@ -70,6 +72,7 @@ __all__ = [
     "base",
     "behaviour",
     "cached",
+    "catalog",
     "causal",
     "clean",
     "cluster",
@@ -92,6 +95,7 @@ __all__ = [
     "make_forecaster",
     "memory_report",
     "model",
+    "monitor",
     "np",
     "optimize",
     "paginate",

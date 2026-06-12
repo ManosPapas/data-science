@@ -4,10 +4,11 @@ from __future__ import annotations
 
 import numpy as np
 import polars as pl
+import pytest
 from matplotlib.axes import Axes
 from matplotlib.figure import Figure
 
-from core.viz import base, cluster, conceptual, eda, interactive, model, timeseries
+from core.viz import base, cluster, conceptual, eda, explain, interactive, model, timeseries
 
 
 def test_eda_charts_return_axes(rng: np.random.Generator) -> None:
@@ -46,7 +47,26 @@ def test_timeseries_and_multipanel(rng: np.random.Generator) -> None:
     assert isinstance(fig, Figure)
 
 
+def test_partial_dependence_returns_figure(rng: np.random.Generator) -> None:
+    from sklearn.linear_model import LogisticRegression
+
+    x = rng.normal(size=(60, 2))
+    y = (x[:, 0] > 0).astype(int)
+    fig = explain.partial_dependence(LogisticRegression().fit(x, y), x, [0])
+    assert isinstance(fig, Figure)
+
+
+def test_chart_signature_shows_injected_kwargs() -> None:
+    import inspect
+
+    params = inspect.signature(eda.histogram).parameters
+    assert "values" in params  # the draw function's own data parameter
+    for injected in ("ax", "title", "grid", "save"):
+        assert injected in params  # Jupyter help must show the decorator's keywords
+
+
 def test_interactive_charts_return_plotly_figure() -> None:
+    pytest.importorskip("plotly")  # optional 'interactive' extra — skip, don't fail, without it
     df = pl.DataFrame({"x": [1, 2, 3], "y": [3.0, 1.0, 2.0]})
     fig = interactive.line(df, "x", "y", title="t")
     assert type(fig).__module__.startswith("plotly")

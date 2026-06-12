@@ -46,18 +46,18 @@ class _Baseline:
         return np.full(horizon, float(self._y[-1]))
 
     def predict_interval(
-        self, horizon: int, *, alpha: float = 0.05, x: Any = None
+        self, horizon: int, *, alpha: float = 0.05, x: Any = None, point: ArrayLike | None = None
     ) -> tuple[NDArray[np.float64], NDArray[np.float64]]:
-        point = self.predict(horizon)
+        center = np.asarray(point, dtype=float) if point is not None else self.predict(horizon)
         if self.strategy == "mean":
             sigma_mean = float(self._y.std(ddof=1)) if self._y.size > 1 else 0.0
-            return _normal_band(point, sigma_mean, alpha, grow=False)
+            return _normal_band(center, sigma_mean, alpha, grow=False)
         if self.strategy == "seasonal_naive":
             diffs = self._y[self.season_length :] - self._y[: -self.season_length]
         else:
             diffs = np.diff(self._y)
         sigma = float(np.std(diffs, ddof=1)) if diffs.size > 1 else 0.0
-        return _normal_band(point, sigma, alpha, grow=True)
+        return _normal_band(center, sigma, alpha, grow=True)
 
 
 class _Classical:
@@ -88,11 +88,18 @@ class _Classical:
         return np.asarray(self._result.forecast(horizon, exog=exog), dtype=float)
 
     def predict_interval(
-        self, horizon: int, *, alpha: float = 0.05, x: ArrayLike | None = None
+        self,
+        horizon: int,
+        *,
+        alpha: float = 0.05,
+        x: ArrayLike | None = None,
+        point: ArrayLike | None = None,
     ) -> tuple[NDArray[np.float64], NDArray[np.float64]]:
+        """Pass an already-computed ``point`` forecast to skip recomputing it (ETS path)."""
         if self.kind == "ets":
+            center = np.asarray(point, dtype=float) if point is not None else self.predict(horizon)
             sigma = float(np.std(np.asarray(self._result.resid, dtype=float), ddof=1))
-            return _normal_band(self.predict(horizon), sigma, alpha, grow=True)
+            return _normal_band(center, sigma, alpha, grow=True)
         exog = np.asarray(x, dtype=float) if x is not None else None
         forecast = self._result.get_forecast(horizon, exog=exog)
         ci = np.asarray(forecast.conf_int(alpha=alpha), dtype=float)
@@ -106,7 +113,7 @@ class _MLReduction:
         self.estimator = estimator
         self.lags = lags
         self._history: NDArray[np.float64] = np.empty(0)
-        self._sigma: float = 0.0  # in-sample residual std, set at fit time
+        self._sigma: float = 0.0  # one-step holdout residual std, set at fit time
 
     def fit(self, y: ArrayLike, x: Any = None) -> Self:
         self._history = np.asarray(y, dtype=float)
@@ -115,9 +122,25 @@ class _MLReduction:
         )
         target = self._history[self.lags :]
         self.estimator.fit(rows, target)
-        resid = target - np.asarray(self.estimator.predict(rows), dtype=float)
-        self._sigma = float(np.std(resid, ddof=1)) if resid.size > 1 else 0.0
+        self._sigma = self._holdout_sigma(rows, target)
         return self
+
+    def _holdout_sigma(self, rows: NDArray[np.float64], target: NDArray[np.float64]) -> float:
+        """One-step residual std on a time-ordered holdout.
+
+        In-sample residuals of low-bias learners (forests, boosters) are near zero, which would
+        make the band dishonestly narrow — so probe with a clone fit on the first 75% and measure
+        on the rest; fall back to in-sample only when the series is too short.
+        """
+        from sklearn.base import clone
+
+        cut = int(target.size * 0.75)
+        if target.size - cut >= 3:
+            probe = clone(self.estimator).fit(rows[:cut], target[:cut])
+            resid = target[cut:] - np.asarray(probe.predict(rows[cut:]), dtype=float)
+        else:
+            resid = target - np.asarray(self.estimator.predict(rows), dtype=float)
+        return float(np.std(resid, ddof=1)) if resid.size > 1 else 0.0
 
     def predict(self, horizon: int, x: Any = None) -> NDArray[np.float64]:
         history = list(self._history)
@@ -130,11 +153,12 @@ class _MLReduction:
         return np.asarray(forecasts, dtype=float)
 
     def predict_interval(
-        self, horizon: int, *, alpha: float = 0.05, x: Any = None
+        self, horizon: int, *, alpha: float = 0.05, x: Any = None, point: ArrayLike | None = None
     ) -> tuple[NDArray[np.float64], NDArray[np.float64]]:
-        # sigma is the in-sample one-step residual std cached at fit time; the band widens
-        # with sqrt(horizon) — an approximation for the recursive multi-step forecast.
-        return _normal_band(self.predict(horizon), self._sigma, alpha, grow=True)
+        # sigma is the one-step holdout residual std cached at fit time; the band widens with
+        # sqrt(horizon) — an approximation for the recursive multi-step forecast.
+        center = np.asarray(point, dtype=float) if point is not None else self.predict(horizon)
+        return _normal_band(center, self._sigma, alpha, grow=True)
 
 
 _BASELINES = {"naive", "seasonal_naive", "mean"}
@@ -142,10 +166,11 @@ _CLASSICAL = {"arima": "sarimax", "sarimax": "sarimax", "ets": "ets", "holt_wint
 
 
 def make_forecaster(name: str = "naive", **params: Any) -> Any:
-    """Build a forecaster with a uniform ``fit(y)`` / ``predict(horizon)``.
+    """Build a forecaster with a uniform ``fit(y)`` / ``predict(horizon)`` / ``predict_interval``.
 
     Names: naive, seasonal_naive, mean, arima, sarimax, ets/holt_winters, ml. ``ml`` needs
     ``estimator=`` (any sklearn regressor, e.g. from ``registry.make_model``).
+    ``predict_interval(horizon, point=...)`` reuses an already-computed point forecast.
     """
     if name in _BASELINES:
         return _Baseline(strategy=name, season_length=params.get("season_length", 1))

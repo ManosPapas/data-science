@@ -21,6 +21,8 @@ def fit_demand(price: ArrayLike, quantity: ArrayLike) -> tuple[float, float]:
     q = np.asarray(quantity, dtype=float)
     if np.any(p <= 0) or np.any(q <= 0):
         raise ValueError("fit_demand requires strictly positive price and quantity")
+    if np.unique(p).size < 2:
+        raise ValueError("fit_demand needs at least two distinct prices to identify elasticity")
     elasticity, intercept = np.polyfit(np.log(p), np.log(q), 1)
     return float(intercept), float(elasticity)
 

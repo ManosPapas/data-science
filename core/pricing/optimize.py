@@ -32,10 +32,15 @@ def optimal_price(
     """Grid-search ``candidates`` for the profit-maximizing price; returns ``(price, profit)``.
 
     With ``unit_cost=0`` this maximizes revenue. Robust for any demand shape — supply a realistic
-    set of candidate price points to evaluate.
+    set of candidate price points to evaluate. Candidates must be finite and strictly positive
+    (p=0 makes constant-elasticity demand blow up to inf, and argmax over NaN picks garbage).
     """
     prices = np.asarray(candidates, dtype=float)
+    if prices.size == 0 or not np.all(np.isfinite(prices)) or np.any(prices <= 0):
+        raise ValueError("candidates must be non-empty, finite, and strictly positive")
     profit = profit_at(intercept, elasticity, prices, unit_cost=unit_cost)
+    if not np.all(np.isfinite(profit)):
+        raise ValueError("demand model produced non-finite profit — check the fitted parameters")
     best = int(np.argmax(profit))
     return float(prices[best]), float(profit[best])
 

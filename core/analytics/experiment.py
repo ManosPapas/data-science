@@ -1,14 +1,18 @@
 """A/B experiment analysis — lift, significance, confidence interval, and a verdict.
 
-Builds on the primitives in ``analytics.stats`` (Welch t-test, two-proportion z-test).
+Builds on the primitives in ``analytics.stats`` (Welch t-test, two-proportion z-test). Also ships
+the experiment-quality toolkit: ``srm_check`` (is the split broken?), ``cuped_adjust`` (variance
+reduction from a pre-experiment covariate), and ``msprt_means`` (an always-valid p-value that is
+safe to peek at while the experiment runs).
 """
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from dataclasses import dataclass
 
 import numpy as np
-from numpy.typing import ArrayLike
+from numpy.typing import ArrayLike, NDArray
 from scipy.stats import norm
 
 from core.analytics import stats
@@ -93,3 +97,58 @@ def analyze_conversions(
         significant,
         _verdict(effect, significant),
     )
+
+
+def srm_check(
+    counts: Sequence[int], *, expected: Sequence[float] | None = None
+) -> stats.TestResult:
+    """Sample-ratio-mismatch chi-square: do the arm sizes match the intended split?
+
+    A small p-value (< 0.001 is the usual alarm) means assignment is broken — fix the experiment
+    before reading any metric. ``expected`` are split ratios (default: equal arms).
+    """
+    from scipy.stats import chisquare
+
+    observed = np.asarray(counts, dtype=float)
+    ratios = (
+        np.asarray(expected, dtype=float)
+        if expected is not None
+        else np.full(observed.size, 1.0 / observed.size)
+    )
+    ratios = ratios / ratios.sum()
+    result = chisquare(observed, f_exp=observed.sum() * ratios)
+    return stats.TestResult(float(result.statistic), float(result.pvalue))
+
+
+def cuped_adjust(
+    metric: ArrayLike, covariate: ArrayLike, *, theta: float | None = None
+) -> NDArray[np.float64]:
+    """CUPED variance reduction: residualize ``metric`` on a pre-experiment ``covariate``.
+
+    Returns ``metric - theta * (covariate - mean(covariate))`` — same mean, lower variance, so the
+    same effect is detectable with fewer users. Compute ``theta`` once on ALL units (both arms
+    pooled) and pass it in; adjust each arm with that shared theta, then run ``analyze_means``.
+    """
+    m = np.asarray(metric, dtype=float)
+    c = np.asarray(covariate, dtype=float)
+    factor = float(np.cov(m, c)[0, 1] / c.var(ddof=1)) if theta is None else theta
+    return np.asarray(m - factor * (c - c.mean()), dtype=float)
+
+
+def msprt_means(control: ArrayLike, treatment: ArrayLike, *, tau: float | None = None) -> float:
+    """Always-valid p-value (mixture SPRT) for a difference in means — safe to peek anytime.
+
+    A fixed-horizon t-test is only valid when you look once, at the planned sample size; this
+    p-value stays valid under continuous monitoring, so you may stop the moment it crosses alpha.
+    ``tau`` is the prior scale of plausible effects (default: half the pooled standard deviation).
+    """
+    c = np.asarray(control, dtype=float)
+    t = np.asarray(treatment, dtype=float)
+    se2 = float(c.var(ddof=1) / c.size + t.var(ddof=1) / t.size)
+    scale = tau if tau is not None else 0.5 * float(np.sqrt((c.var(ddof=1) + t.var(ddof=1)) / 2))
+    delta = float(t.mean() - c.mean())
+    tau2 = scale * scale
+    likelihood = float(
+        np.sqrt(se2 / (se2 + tau2)) * np.exp(delta**2 * tau2 / (2 * se2 * (se2 + tau2)))
+    )
+    return min(1.0, 1.0 / likelihood)

@@ -53,6 +53,24 @@ def test_ml_reduction_forecaster(rng: np.random.Generator) -> None:
     assert forecaster.predict(6).shape == (6,)
 
 
+def test_ml_interval_brackets_and_reuses_point(rng: np.random.Generator) -> None:
+    from core.modeling.registry import make_model
+
+    forecaster = make_forecaster(
+        "ml",
+        estimator=make_model("random_forest", task="regression", n_estimators=30, random_state=0),
+        lags=12,
+    )
+    forecaster.fit(_series(rng))
+    point = forecaster.predict(6)
+    lower, upper = forecaster.predict_interval(6, point=point)
+    assert np.all(lower < point)  # holdout sigma must be > 0 on a noisy series
+    assert np.all(point < upper)
+    lower2, upper2 = forecaster.predict_interval(6)  # without the precomputed point: same band
+    assert np.allclose(lower, lower2)
+    assert np.allclose(upper, upper2)
+
+
 def test_backtest_metrics() -> None:
     truth = [10.0, 12.0, 11.0]
     pred = [11.0, 11.0, 11.0]

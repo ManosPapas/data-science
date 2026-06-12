@@ -76,8 +76,9 @@ def auto_cast(df: pl.DataFrame) -> pl.DataFrame:
 
 def downcast(df: pl.DataFrame) -> pl.DataFrame:
     """Shrink numeric dtypes and convert low-cardinality strings to Categorical (saves RAM)."""
+    # Series.shrink_dtype (the Expr form is a deprecated no-op in polars >= 1.4x)
     ints = [
-        pl.col(name).shrink_dtype()
+        df[name].shrink_dtype()
         for name, dtype in df.schema.items()
         if dtype in (pl.Int64, pl.Int32, pl.Int16, pl.UInt64, pl.UInt32)
     ]

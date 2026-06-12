@@ -205,9 +205,26 @@ if hasattr(clf, "feature_importances_"):
     explain.feature_importance(names, clf.feature_importances_, ax=axes[0], top=12)
 
 # %%
-fig, axes = base.grid(2)
-explain.partial_dependence(fitted, x_test_pd, ["tenure_months"], ax=axes[0])
-explain.partial_dependence(fitted, x_test_pd, ["monthly_spend"], ax=axes[1])
+explain.partial_dependence(fitted, x_test_pd, ["tenure_months", "monthly_spend"])
+
+# %% [markdown]
+# ### SHAP (needs the `explain` extra)
+# Per-customer, per-feature contributions on the boosted challenger — TreeExplainer wants a tree
+# model, so we explain the xgboost pipeline rather than the linear winner.
+
+# %%
+import shap
+
+xgb_fitted = train.fit(models["xgboost"], x_train, y_train)
+pre_fitted = xgb_fitted.named_steps["pre"]
+shap_x = pd.DataFrame(
+    pre_fitted.transform(x_test_pd), columns=list(pre_fitted.get_feature_names_out())
+)
+shap_values = shap.TreeExplainer(xgb_fitted.named_steps["clf"]).shap_values(shap_x)
+explain.shap_summary(shap_values, shap_x)
+
+# %%
+explain.shap_bar(shap_values, shap_x)
 
 # %% [markdown]
 # ## 7. Persist (versioned model store)

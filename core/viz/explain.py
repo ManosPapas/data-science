@@ -1,14 +1,14 @@
 """Model-explainability charts.
 
 ``feature_importance`` / ``permutation_importance`` take precomputed (names, values);
-``partial_dependence`` takes a fitted sklearn estimator + X; the ``shap_*`` charts own their own
-rendering (they return a ``Figure``) and need the ``shap`` extra (``uv sync --extra explain``).
+``partial_dependence`` and the ``shap_*`` charts render multi-panel displays and return a
+``Figure`` (shap needs the ``shap`` extra, ``uv sync --extra explain``).
 """
 
 from __future__ import annotations
 
 from collections.abc import Callable, Sequence
-from typing import Any
+from typing import Any, cast
 
 import numpy as np
 import seaborn as sns
@@ -52,12 +52,31 @@ def permutation_importance(
     ax.set(xlabel="importance (mean decrease)", ylabel="")
 
 
-@chart(title="Partial dependence")
 def partial_dependence(
-    ax: Axes, estimator: Any, X: Any, features: Sequence[int | str], *, kind: str = "average"
-) -> None:
-    """PDP (``kind='average'``) or ICE (``kind='individual'``/``'both'``) for ``features``."""
-    PartialDependenceDisplay.from_estimator(estimator, X, features, kind=kind, ax=ax)
+    estimator: Any,
+    X: Any,
+    features: Sequence[int | str],
+    *,
+    kind: str = "average",
+    save: str | None = None,
+) -> Figure:
+    """PDP (``kind='average'``) or ICE (``'individual'``/``'both'``) for ``features``.
+
+    sklearn's display draws child axes per feature (a single passed Axes would become an invisible
+    bounding box), so this is multi-panel and returns a ``Figure``. Integer columns are coerced to
+    float first — sklearn refuses integer features for PDP.
+    """
+    import pandas as pd
+
+    if isinstance(X, pd.DataFrame):
+        ints = X.select_dtypes(include="integer").columns
+        if len(ints):
+            X = X.astype(dict.fromkeys(ints, "float64"))
+    display = PartialDependenceDisplay.from_estimator(estimator, X, features, kind=kind)
+    figure = cast(Figure, display.figure_)
+    if save is not None:
+        figure.savefig(save, bbox_inches="tight", dpi=150)
+    return figure
 
 
 def _shap_figure(render: Callable[[], object], save: str | None) -> Figure:
