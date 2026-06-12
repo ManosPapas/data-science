@@ -187,6 +187,79 @@ different assumption — pick the one you can defend.
 
 ---
 
+## analytics.curves — derivatives & turning points on any curve
+
+The calculus layer under pricing/optimization: works on sampled `(x, y)` curves (uneven spacing
+ok) or callables. Numerical derivatives amplify noise — `smooth_series` first, and distrust
+extrema found on raw noisy data.
+
+| Function | Use when | What it tells you |
+|---|---|---|
+| `slope(x, y)` / `curvature(x, y)` | Rate of change / acceleration along a curve | First/second derivative by central differences. Slope crossing 0 = a turning point; curvature < 0 = concave (diminishing returns) |
+| `point_elasticity(x, y)` | %-for-% sensitivity at each x | d ln(y)/d ln(x) along the curve — the local elasticity read for any response, not just demand |
+| `local_extrema(x, y)` | Find optima on a sampled curve | Interior maxima/minima, parabolic-refined. A "best" value at the grid edge means the real optimum may be outside the grid — widen it |
+| `inflection_points(x, y)` | Where acceleration flips | Sign changes of the second derivative: peak growth on an S-curve, onset of diminishing returns on a response curve |
+| `convexity(x, y)` | Trust an interior optimum? | convex/concave/mixed verdict from curvature signs. Concave objective → hill-climbing and interior optima are trustworthy; mixed → multiple local optima, grid-search first |
+| `marginal_effect(fn, base, name)` / `gradient(fn, base)` | Local what-if rate on a business model | Numerical ∂fn/∂input at the base point (all inputs at once via `gradient`) — "one more euro of X is worth this". Local: re-evaluate at different bases |
+| `response_curve(fn, base, name, values)` | The full curve behind a sensitivity | Sweep one input, get output + local slope — shows *where* returns diminish, not just that they do (the two-point version is `scenario.sensitivity`) |
+
+---
+
+## analytics.drivers — diagnostic decomposition (root cause, in exactly-summing parts)
+
+Decomposition is accounting, not causation: it says *where* a change sits; `analytics.causal`
+says what made it happen. All outputs sum exactly to the headline change — no residual.
+
+| Function | Use when | What it tells you |
+|---|---|---|
+| `change_decomposition(current, baseline, value=, by=)` | "Why is the metric down?" — first pass | Per-segment contribution to the total change (entries/exits counted in full), sorted by impact. The root-cause shortlist |
+| `price_volume_mix(current, baseline, price=, volume=, by=)` | Revenue bridge for the deck | ΔRevenue split into price effect (charging differently), volume effect (market grew/shrank), mix effect (share shifted toward cheap/expensive segments) — separates "pricing worked" from "mix flattered us" |
+| `revenue_leakage(df, expected=, actual=, by=)` | Entitled vs realized revenue | Leakage = expected − actual, ranked by group: unapproved discounting, billing gaps, fee waivers. Persistent positive leakage in one rep/segment is the audit signal |
+
+---
+
+## analytics.risk — risk & uncertainty measures on outcome samples
+
+Consumes outcome draws (Monte Carlo from `decision.simulate`, bootstrap replicates, historical
+P&L). Convention: outcomes are better-is-bigger, so risk lives in the low quantiles.
+
+| Function | Use when | What it tells you |
+|---|---|---|
+| `value_at_risk(outcomes, alpha=)` | "How bad, with 95% confidence?" | The alpha-quantile outcome — a *threshold*, silent about how bad the tail beyond it gets |
+| `expected_shortfall(outcomes, alpha=)` | What a bad year actually looks like | Mean of the worst-alpha tail (CVaR). Coherent (sub-additive) — aggregates across a portfolio sensibly, unlike VaR |
+| `downside_deviation(outcomes, target=)` | Spread that only counts the bad side | RMS shortfall below target — plain std punishes upside surprises too; the Sortino denominator |
+| `max_drawdown(series)` | Path risk of a cumulative series | Worst peak-to-trough fraction — two paths with the same endpoint can differ wildly in survivability |
+| `probability_below/above(outcomes, threshold)` | Probability of failure / of hitting the target | Tail mass each side of the line — the number a commitment can be made on |
+| `sharpe_ratio` / `sortino_ratio(returns, ...)` | Risk-adjusted comparison | Mean excess return per unit of (downside) volatility; `periods_per_year` annualizes by √t |
+| `risk_summary(outcomes, targets=)` | The one-slide risk read | Mean/std, P5-P95, VaR/CVaR, P(≥ target) — P50 is the plan, P10 the funding case |
+
+---
+
+## analytics.graph — network analytics on edge lists
+
+Polars edge-list in (`source`, `target`[, `weight`]), scipy.sparse.csgraph underneath. Commercial
+graphs: co-purchase (from `analytics.basket`), referrals, logistics, money movement.
+
+| Function | Use when | What it tells you |
+|---|---|---|
+| `degree_centrality(edges)` | First-pass importance | Degree, weighted degree, normalized centrality — hub products, super-referrers. Local measure only |
+| `pagerank(edges, damping=)` | Importance through the structure | Random-surfer score (sums to 1): high when *important* nodes point at you, not just many |
+| `connected_components(edges)` | Segmentation by reachability | Component label + size per node — customer communities, product islands, fraud rings |
+| `shortest_paths(edges, origin=)` | Distance/cost from one node | Dijkstra distances (weights = costs, lower = closer; invert similarities before routing) |
+| `minimum_spanning_tree_edges(edges)` | Cheapest network connecting everything | The minimal backbone — network design's lower bound; extra edges buy redundancy, not reach |
+| `max_flow(edges, origin=, sink=)` | Throughput ceiling of a network | Max-flow value + per-edge flows; the saturated cut is the binding bottleneck. Capacities are rounded to ints (`scale=` for fractional) |
+
+---
+
+## analytics.basket — market basket analysis
+
+| Function | Use when | What it tells you |
+|---|---|---|
+| `frequent_itemsets(df, transaction=, item=, min_support=)` | What sells together (sets of 1-3) | Support = share of transactions containing the whole set; apriori pruning means rare items can't form frequent sets (raise `min_support` if the pair join blows up) |
+| `association_rules(df, transaction=, item=, min_support=, min_confidence=)` | Cross-sell rules, ranked | Confidence = P(consequent \| antecedent) — the hit rate if you recommend on the rule; **lift** > 1 separates real affinity from "both are just popular"; leverage is the same gap in absolute share |
+
+---
+
 ## modeling.split — honest train/test separation
 
 Leakage rule (PDF §5): split **first**, fit everything (scalers, imputers, encoders, resamplers)
@@ -335,6 +408,31 @@ Univariate first pass: `stats.outlier_bounds`; treatment: `clean.winsorize`.
 
 ---
 
+## modeling.survival — *when* churn/failure happens (censoring done right)
+
+Classification throws away timing and mishandles customers who haven't churned *yet* (censored,
+not negative). `events`: 1 = churned/failed at `duration`, 0 = still active at last sight.
+
+| Function | Use when | Statistical reading |
+|---|---|---|
+| `kaplan_meier(durations, events)` | Retention curve from censored data | Non-parametric S(t) = P(survive past t) with Greenwood CIs — every account contributes exposure up to its last sighting, which is exactly what naive churn rates get wrong |
+| `survival_at(..., times)` / `median_survival(...)` | Retention at a tenure / typical lifetime | Step-read of S(t); median = first crossing of 0.5 (NaN = most of the base outlives the window — itself informative) |
+| `restricted_mean_survival(..., horizon=)` | CLV-ready retention time | Area under KM to the horizon = expected retained periods per customer; multiply by margin/period. Always estimable under censoring (the unrestricted mean isn't) |
+| `cox_ph(df, duration=, event=, x=)` | Which factors drive churn hazard | Semi-parametric regression: `hazard_ratio` = exp(coef) multiplies the churn hazard at *every* tenure (the proportional-hazards assumption — check by fitting early/late tenure splits). No baseline-hazard shape assumed |
+
+---
+
+## modeling.recommend — item-item collaborative filtering
+
+| Function | Use when | Statistical reading |
+|---|---|---|
+| `ItemItemRecommender().fit(df, user=, item=, rating=)` | "Customers who bought X also bought…" | Cosine similarity over the user dimension; implicit feedback (no rating) scores interactions 1. Item-item is the production classic: item neighbourhoods are stabler than user tastes and every pick has a "because you bought X" explanation |
+| `.recommend(user, k=)` / `.similar_items(item, k=)` | Personal top-k / the bundle shelf | Similarity-weighted sum over the user's history (seen items excluded); cold users/items need a fallback — `popularity_baseline` |
+| `popularity_baseline(df, item=, k=)` | The bar to clear | Most-interacted items; a recommender that can't beat popularity on `evaluate.ranking_metrics` isn't earning its complexity |
+| `evaluate.ranking_metrics(relevance, scores, k=)` | Score a *ranking*, not a label | NDCG@k (graded, position-discounted), precision/recall@k, MRR — classification metrics ignore order; these score what the shelf actually serves |
+
+---
+
 ## modeling.monitor — drift after deployment
 
 | Function | Use when | Statistical reading |
@@ -343,6 +441,33 @@ Univariate first pass: `stats.outlier_bounds`; treatment: `clean.winsorize`.
 | `ks_drift(expected, actual)` | Same, with a test | Two-sample Kolmogorov-Smirnov: max ECDF gap + p-value. At very large n it flags trivial differences — pair with PSI for "big enough to matter" |
 | `label_drift(expected, actual)` | Class-mix shift (labels or predicted classes) | Chi-square on label proportions (prior shift); unseen-in-baseline classes get a floor share so a new class registers as drift. PSI/KS cover numeric columns only |
 | `drift_report(baseline, current, columns=)` | Routine monitoring sweep | Per-column PSI + KS, sorted. Run it on features **and the model's scores** — score drift is the early warning. Concept drift (X→y changing, PDF §5) needs labels: re-evaluate metrics when they arrive; until then drift here is the proxy |
+| `control_limits(baseline, sigmas=)` | Watch a KPI/metric stream | Shewhart mean ± k·sigma band from an in-control baseline; points outside are signals (~0.3% false alarms at 3 sigma). Compute limits on a period you *trust* — recomputing on drifting data hides the drift |
+| `ewma_alerts(values, baseline, lam=)` | Early warning on slow drifts | EWMA control chart: exponentially weighted average vs widening-to-asymptote limits — catches small persistent shifts a Shewhart band misses. Persistent alerts → fire `drift_report` |
+
+---
+
+## modeling.checks — model behaviour validation (business logic, not test scores)
+
+A model can score well and be unshippable: demand rising with price, risk falling with exposure.
+Probe the fitted model like a domain reviewer would; data-side rules → `validate.check_rules`.
+
+| Function | Use when | Statistical reading |
+|---|---|---|
+| `monotonicity(model, x, feature=, direction=)` | Sign-check one relationship | Sweeps the feature per row, flags wrong-direction prediction moves (`violation_rate`, `worst_gap`). Violations in flexible models usually mean confounded training data — fix with monotone constraints (lightgbm/xgboost) or features, don't ship and hope |
+| `expected_directions(model, x, {feature: direction})` | Model governance as a table | All sign expectations re-checked per retrain; alert on regressions |
+| `prediction_bounds(model, x, lower=, upper=)` | Outputs in the plausible range? | Share of predictions outside business bounds (negative price, conversion > 1) — extrapolation or leakage symptoms; understand before clipping |
+| `perturbation_stability(model, x, scale=)` | Robustness to measurement noise | Prediction movement under noise-sized input jitter; big `p95_abs_change` = over-sharp boundaries that will thrash downstream decisions — regularize/ensemble |
+| `validate.check_rules(df, {name: pl.Expr})` (features) | Business-rule gate on data | Named boolean predicates that must hold per row (nulls count as violations); `raise_on_error=True` makes it a pipeline gate |
+
+---
+
+## modeling.interpret — counterfactuals, conformal intervals, confidence
+
+| Function | Use when | Statistical reading |
+|---|---|---|
+| `counterfactual(model, row, candidates=, target=)` | "What would change the outcome?" | Greedy minimal-change search over *actionable* levers only (never immutables — a counterfactual on tenure is an explanation, not an action). Holding other features fixed can describe an impossible customer — sanity-check the winner. SHAP says which features mattered; this says what to *do* |
+| `conformal_intervals(model, x_cal, y_cal, x_new, alpha=)` | Honest intervals for any regressor | Split-conformal: intervals cover the truth with P ≥ 1-alpha on exchangeable data, no normality or model trust needed. Calibration data must be *held out from training*; the guarantee is marginal, breaks under drift — re-calibrate periodically |
+| `confidence_score(probabilities, method=)` | Triage / human-review routing | Per-row confidence in [0,1]: `margin` (top-1 − top-2) or `entropy` (distribution concentration). Only as honest as the probabilities — check `viz.model.calibration` first |
 
 ---
 
@@ -371,10 +496,70 @@ Explore-exploit alternatives to a fixed A/B: keep choosing, keep learning. All e
 
 ## decision.optimize — turn estimates into actions
 
+Results follow scipy conventions: with `maximize=True` the objective is negated internally —
+read the optimum off `-result.fun`.
+
 | Function | Use when | What it does |
 |---|---|---|
 | `linear_program(cost, a_ub=, b_ub=, ..., maximize=)` | Budget/capacity allocation | LP via scipy linprog; the standard "maximize linear objective under linear constraints" |
+| `shadow_prices(result, names_ub=, maximize=)` | What is one more unit of capacity worth? | Duals of a solved LP: the marginal objective value of relaxing each constraint — the rational ceiling on paying for extra resource, 0 = not binding. The principled opportunity-cost number |
+| `integer_program(cost, ..., integrality=, maximize=)` | Whole-unit / yes-no decisions | Mixed-integer LP (scipy milp). LP-then-round is *not* a substitute: rounding can break constraints and land far from the optimum |
+| `knapsack(values, weights, capacity)` | Project/campaign selection under a budget | Exact 0/1 knapsack via MILP — greedy value-per-weight can be arbitrarily bad at integer scale |
+| `nonlinear_program(objective, x0, bounds=, constraints=, maximize=)` | Curved objectives (diminishing returns, saturation) | scipy minimize wrapper. Local solver: check `analytics.curves.convexity` or multi-start before trusting one run |
 | `assign(cost_matrix, maximize=)` | One-to-one matching (tasks↔people, slots↔ads) | Hungarian algorithm — exact optimal assignment |
+| `portfolio_weights(expected_returns, covariance, risk_aversion=)` | Spread a budget over risky options | Mean-variance optimum (full investment, no shorting, concentration cap). The covariance is what diversifies — and μ/Σ are *estimates*: stress them before betting the budget |
+| `pareto_front(points, maximize=)` | Several objectives, no honest single score | Mask of non-dominated options — the genuine trade-off menu (margin vs volume vs risk) without arbitrary weights |
+| `scenario_optimize(value_fn, x0, scenarios, criterion=)` | One decision against many futures | Stochastic optimization: maximize the mean (`'mean'`) or the worst case (`'worst'`, robust max-min) over sampled scenarios — deciding under uncertainty, not per-scenario hindsight |
+
+---
+
+## decision.simulate — Monte Carlo: propagate uncertainty through a business model
+
+Point estimates hide the tail — a plan built on means can still lose money 30% of the time.
+Risk measures over the resulting samples live in `analytics.risk`.
+
+| Function | Use when | What it tells you |
+|---|---|---|
+| `monte_carlo(value_fn, inputs, n=, correlation=)` | Any business case with uncertain inputs | Samples inputs (scipy distributions / custom samplers / constants; optionally rank-correlated via Gaussian copula — costs and volumes rarely move independently, and independence understates tail risk), pushes them through `value_fn`, returns the outcome *distribution* |
+| `SimulationResult.summary(targets=)` / `.p10/.p50/.p90` / `.prob_above` | The deck numbers | P50 = plan, P10 = funding case, P(≥ target) = the commitment you can defend |
+| `SimulationResult.drivers()` | Which uncertainty drives the spread | \|Spearman\| of each input vs the outcome across draws — the simulation-native tornado; de-risk (research, hedge, contract) the top driver first |
+| `stress_test(value_fn, base, stresses)` | "Do we survive *this*?" | Named adverse shocks + the all-at-once combined row (correlations go to 1 in a crisis). Complements `monte_carlo`: probability vs survivability |
+| `simulate_paths(start=, drift=, volatility=, periods=)` | Demand/revenue trajectories | Compounding (or additive) random-walk paths; `path_percentiles` turns them into the chart-ready uncertainty fan |
+
+---
+
+## decision.inventory — newsvendor, EOQ, safety stock
+
+| Function | Use when | What it tells you |
+|---|---|---|
+| `newsvendor(price=, cost=, salvage=, demand_mean=/demand_samples=)` | One-shot stocking under uncertain demand | Optimal stock covers demand with P = critical fractile (p−c)/(p−s), *not* mean demand: fat margins justify deliberate overstock, thin ones deliberate stock-outs. Feed forecast Monte Carlo draws as `demand_samples` |
+| `eoq(demand=, order_cost=, holding_cost=)` | Steady-demand order sizing | √(2DS/H); the optimum is famously flat (±20% on Q costs ~2%) — get holding cost roughly right and move on |
+| `safety_stock(...)` / `reorder_point(...)` | Service through lead time | z·√(LT·σ_d² + μ_d²·σ_LT²) buffer + expected lead-time demand. Service is convex in cost: 95→99% costs far more than 90→95% — set levels per item value |
+| `simulate_inventory_policy(demand, reorder_at=, order_quantity=)` | Validate the closed forms | Replays an (R, Q) policy against real/simulated demand; negative stock = stock-out depth |
+
+---
+
+## decision.capacity — Erlang C staffing & queueing economics
+
+| Function | Use when | What it tells you |
+|---|---|---|
+| `erlang_c(arrival_rate=, service_rate=, servers=)` | Wait/queue metrics at a staffing level | M/M/c steady state: P(wait), average wait, queue length, utilization. The core economics: waiting explodes *nonlinearly* as utilization → 1, so "run at 95%" is a queueing disaster, not efficiency |
+| `QueueMetrics.service_level(t)` | The SLA number | P(wait ≤ t) — "80% answered in 20s" |
+| `required_servers(..., target_wait_probability=/target_service_level=, answer_within=)` | Staff to an SLA | Smallest c meeting the target, with full metrics attached — capacity-utilization optimization is the gap between this and what you run today |
+
+---
+
+## decision.game — game theory: the other side moves too
+
+Optimization assumes the environment holds still; competitors don't. An equilibrium is a
+*prediction of where dynamics settle*, not a recommendation.
+
+| Function | Use when | What it tells you |
+|---|---|---|
+| `pure_nash(payoff_row, payoff_col)` | Discrete strategy games (discount vs hold) | Cells where neither side gains by deviating alone. The pricing prisoner's dilemma in one check: "both discount" can be the unique equilibrium even though "both hold" pays more |
+| `mixed_nash_2x2(payoff_row, payoff_col)` | No pure equilibrium (matching-pennies structure) | The interior mixing probabilities — each side mixes to make the *other* indifferent, so your equilibrium mix comes from their payoffs |
+| `iterated_dominance(payoff_row, payoff_col)` | Prune the strategy space | Strategies a rational player never uses, eliminated iteratively; one surviving cell = dominance-solvable game |
+| `best_response_dynamics(responses, start, damping=)` | Competitive/price-war response simulation | Iterates everyone's best reply (reaction functions from each player's profit model) to its resting point — a continuous-strategy Nash equilibrium; seed `start` with your contemplated move to simulate the match-and-settle path |
 
 ---
 
@@ -423,18 +608,67 @@ horizon is the honest compounding of uncertainty.
 | `mae` / `rmse` | Error in units of y | MAE linear (robust), RMSE quadratic (punishes large misses) |
 | `mape` / `smape` | Comparable across series | Percentage errors; MAPE explodes near zero actuals and penalizes over-forecasting more — sMAPE bounds both sides |
 
----
-
-## pricing — elasticity & price optimization
+### forecasting.hierarchy — coherent forecasts across levels
 
 | Function | Use when | Statistical reading |
 |---|---|---|
-| `elasticity.fit_demand(price, quantity)` | Estimate demand response | OLS on ln(q) = a + e·ln(p): constant-elasticity model, slope = elasticity. **Observational price-demand data is confounded** (prices were set in response to demand) — prefer experimental/IV variation (`causal.iv_effect`) when you can |
-| `elasticity.price_elasticity(price, quantity)` | Just the number | e < −1 elastic (price ↑ → revenue ↓), −1 < e < 0 inelastic (price ↑ → revenue ↑) |
-| `elasticity.predict_demand(intercept, elasticity, price)` | Scenario lines | Quantity under the fitted model |
-| `optimize.revenue_at` / `profit_at(intercept, elasticity, price, unit_cost=)` | Money curves | Revenue/profit at candidate prices under the model |
-| `optimize.optimal_price(intercept, elasticity, candidates, unit_cost=)` | Pick the price | Grid-search over realistic candidates (robust to any demand shape) |
-| `optimize.markup_price(elasticity, unit_cost)` | Closed form | c·e/(e+1) — the textbook constant-elasticity optimum; requires elastic demand (e < −1) |
+| `reconcile(forecasts, hierarchy, method=)` | Total/region/product forecasts disagree | Makes every level add up. `ols` (default) projects all base forecasts onto the coherent subspace — pools information across levels and usually *improves* accuracy; `bottom_up` trusts the leaves; `top_down` splits the total by `proportions` (stable aggregate, leaf accuracy only as good as the split) |
+| `coherence_error(forecasts, hierarchy)` | Pre-reconciliation diagnostic | Mean \|parent − Σchildren\| per node — a large gap at one node deserves a look before projection hides the disagreement |
+| `summing_matrix(hierarchy)` | Build your own reconciler | The S matrix mapping leaf values to every node, plus node/leaf order |
+
+---
+
+## pricing — demand & elasticity, WTP, market analysis, price optimization
+
+**Observational price-demand data is confounded** (prices were set in response to demand) —
+prefer experimental/IV variation (`causal.iv_effect`) before pricing off any fit below.
+
+### pricing.elasticity — estimation, uncertainty, segments, dynamics
+
+| Function | Use when | Statistical reading |
+|---|---|---|
+| `fit_demand(price, quantity)` | Estimate demand response | OLS on ln(q) = a + e·ln(p): constant-elasticity model, slope = elasticity |
+| `price_elasticity(price, quantity)` | Just the number | e < −1 elastic (price ↑ → revenue ↓), −1 < e < 0 inelastic (price ↑ → revenue ↑) |
+| `predict_demand(intercept, elasticity, price)` | Scenario lines | Quantity under the fitted model |
+| `fit_demand_ci(price, quantity, confidence=)` | The number *with its uncertainty* | Elasticity ± SE and t-CI. A CI spanning −1 means the data can't tell elastic from inelastic — the raise-vs-cut call is not identified; get more price variation |
+| `bootstrap_elasticity(price, quantity)` | Small n / ugly residuals | Percentile-bootstrap CI, no normality assumption; agreement with `fit_demand_ci` is itself a robustness check |
+| `cross_price_elasticity(quantity, own_price, {name: price})` | Substitutes & complements | One multivariate log-log fit: cross-e > 0 substitute, < 0 complement. Joint estimation matters — competitor prices move with yours, and a univariate fit absorbs their effect into your own slope |
+| `segment_elasticity(df, price=, quantity=, segment=)` | Who is price-sensitive? | Per-segment fits with CIs → differentiated pricing: protect margin where \|e\| is small, compete where it's large |
+| `rolling_elasticity(df, ..., window=)` | Dynamic elasticity through time | Re-fit over a rolling window; drifting/widening bands = the constant-elasticity assumption breaking |
+| `elasticity_drift(df, ..., split=)` | Has price sensitivity moved? | Baseline-vs-recent z-test on the slopes; a drifted elasticity quietly invalidates the optimal price — re-optimize when it fires |
+| `nonlinear_elasticity_check(price, quantity)` | Is one elasticity number wrong? | Adds (ln p)²: significant curvature + lower AIC = elasticity varies with price level; read `local_elasticity` at the prices you actually charge |
+| `aggregate_elasticity` / `elasticity_decomposition(before, after)` | Portfolio elasticity & why it moved | Weighted mean; shift-share split into within-segment change vs mix shift (sums exactly) — a pure-mix move needs portfolio action, not price action |
+
+### pricing.demand — demand curves, purchase probability, willingness-to-pay
+
+| Function | Use when | Statistical reading |
+|---|---|---|
+| `fit_linear_demand(price, quantity)` | Demand with a choke price | q = a + b·p: elasticity varies along the line (`elasticity_at`), demand hits 0 at `choke_price` — predictions beyond it are extrapolation |
+| `fit_logit_demand(price, purchased)` | Purchase probability from buy/no-buy offers | P(buy\|p) = sigmoid(a + b·p); implies WTP ~ Logistic(−a/b, −1/b), so `wtp_median`/`wtp_quantile` come closed-form. A positive slope = confounding (price proxies quality/segment), not a Veblen good |
+| `willingness_to_pay(price, purchased)` | The WTP table | Quantile → price that share won't exceed: median = mass-market price, upper quantiles = the premium tier's room |
+| `van_westendorp(too_cheap, cheap, expensive, too_expensive)` | Survey-based price range (no transactions yet) | Price sensitivity meter: optimal price point, indifference price, acceptable range from curve crossings. Stated preference — calibrate against transactions when you have them |
+| `demand_schedule(quantity_fn, prices)` | Chart/optimize any demand model | (price, quantity, revenue) table — input for `analytics.curves` turning-point analysis |
+
+### pricing.market — supply & demand, censored demand, saturation, structure
+
+| Function | Use when | Statistical reading |
+|---|---|---|
+| `equilibrium(demand_fn, supply_fn, price_low=, price_high=)` / `linear_equilibrium(...)` | Where the market clears | Root of excess demand (Brent) / the closed form for linear curves; below the price the market is short, above it oversupplied |
+| `supply_demand_gap(demand, supply)` | Market balance per period | Gap (excess demand), served, unmet, shortage/surplus regime — persistent one-sided gaps are the mismatch signal |
+| `unconstrain_demand(sales, capacity)` | True demand when sales were capped | Censored-normal MLE: sold-out periods are right-censored (demand ≥ capacity), so raw averages understate demand exactly where it matters. `spill` = unmet demand/period, `spill_rate` = share never served — the classic revenue-management unconstraining step |
+| `saturation_fit(t, y)` | How much market is left? | Logistic S-curve: `capacity` = market potential, `time_to_share(0.9)` = near-saturation date. Weakly identified before the inflection — treat early-stage capacity estimates as speculative |
+| `market_share(df, value=, by=)` / `hhi(shares)` | Structure & concentration | Shares + cumulative; HHI on the 0-10,000 scale (< 1,500 competitive, > 2,500 concentrated) |
+
+### pricing.optimize — optimal prices, marginal economics, dynamic pricing
+
+| Function | Use when | Statistical reading |
+|---|---|---|
+| `revenue_at` / `profit_at(intercept, elasticity, price, unit_cost=)` | Money curves | Revenue/profit at candidate prices under the model |
+| `optimal_price(intercept, elasticity, candidates, unit_cost=)` | Pick the price | Grid-search over realistic candidates (robust to any demand shape) |
+| `markup_price(elasticity, unit_cost)` | Closed form, constant elasticity | c·e/(e+1); requires elastic demand (e < −1) |
+| `optimal_price_linear(intercept, slope, unit_cost=)` | Closed form, linear demand | Midway between unit cost and the choke price — the parabola's vertex |
+| `marginal_revenue(elasticity, price)` / `marginal_profit(..., unit_cost=)` | Direction-of-adjustment signal | MR = p(1 + 1/e) < p always; MR = 0 at e = −1 (the revenue peak). Marginal profit = 0 exactly at `markup_price`: its *sign* says raise vs cut even when the level is rough |
+| `dynamic_prices(demand_rate, capacity=, periods=, candidates=)` | Fixed stock, finite horizon (revenue management) | Backward-induction DP over (period, remaining): Poisson sales around `demand_rate(price, t)`. The solved policy shows both classic forces — prices fall as the deadline nears and rise when stock runs scarce |
 
 ---
 
@@ -581,8 +815,45 @@ All `@chart` functions: pass prepared data, get an `Axes` (multi-panel ones retu
 | Expected value & cost-benefit | `kpi.profit.expected_value` / `profit_curve` / `profit_threshold`; `kpi.financial.roi` |
 | Expected utility & risk attitude | `scenario.expected_utility` / `certainty_equivalent` (risk premium = EV − CE) |
 | Sensitivity & scenario analysis | `scenario.sensitivity` (tornado), `scenario.scenario_table` (coherent what-ifs) |
-| Customer lifetime value | `kpi.financial.clv` (+ churn / retention / NRR helpers) |
-| Price elasticity & revenue optimization | `pricing.elasticity.fit_demand` / `price_elasticity` + `pricing.optimize.optimal_price` / `markup_price` |
+| Customer lifetime value | `kpi.financial.clv` (+ churn / retention / NRR helpers); retention time from censored data → `survival.restricted_mean_survival` |
+| Price elasticity & revenue optimization | `pricing.elasticity.fit_demand` / `fit_demand_ci` + `pricing.optimize.optimal_price` / `markup_price` / `optimal_price_linear` |
+| Cross-price elasticity (substitutes/complements) | `pricing.elasticity.cross_price_elasticity` |
+| Segment-level / dynamic elasticity & drift | `pricing.elasticity.segment_elasticity` / `rolling_elasticity` / `elasticity_drift` / `nonlinear_elasticity_check` / `elasticity_decomposition` |
+| Willingness to pay / purchase probability | `pricing.demand.fit_logit_demand` / `willingness_to_pay` / `van_westendorp` |
+| Demand curves & schedules | `pricing.demand.fit_linear_demand` / `demand_schedule`; constant-elasticity in `pricing.elasticity` |
+| Dynamic pricing / revenue management | `pricing.optimize.dynamic_prices` (finite-horizon DP); censored-demand unconstraining → `pricing.market.unconstrain_demand` |
+| Marginal revenue / marginal profit / marginal effects | `pricing.optimize.marginal_revenue` / `marginal_profit`; generic → `analytics.curves.marginal_effect` / `gradient` |
+| Supply-demand equilibrium & market balance | `pricing.market.equilibrium` / `linear_equilibrium` / `supply_demand_gap` |
+| Saturation & market potential | `pricing.market.saturation_fit` (logistic growth) |
+| Market share & concentration | `pricing.market.market_share` / `hhi` |
+| Derivatives, turning points, convexity | `analytics.curves`: `slope` / `curvature` / `local_extrema` / `inflection_points` / `convexity` / `response_curve` |
+| Root-cause / driver decomposition | `analytics.drivers.change_decomposition`; revenue bridge → `price_volume_mix`; regression/SHAP for model-based drivers |
+| Revenue leakage detection | `analytics.drivers.revenue_leakage` |
+| Monte Carlo simulation & what-if | `decision.simulate.monte_carlo` (+ correlated inputs) / `simulate_paths`; coherent named futures → `scenario.scenario_table` |
+| Stress testing | `decision.simulate.stress_test` (named shocks + combined worst case) |
+| Value-at-risk / expected shortfall / drawdown | `analytics.risk.value_at_risk` / `expected_shortfall` / `max_drawdown` / `risk_summary` |
+| Probability of hitting a target | `analytics.risk.probability_above` / `SimulationResult.prob_above` |
+| Risk-adjusted performance | `analytics.risk.sharpe_ratio` / `sortino_ratio` / `downside_deviation` |
+| Integer / mixed-integer optimization | `decision.optimize.integer_program` / `knapsack` |
+| Nonlinear & stochastic/robust optimization | `decision.optimize.nonlinear_program` / `scenario_optimize` (mean or worst-case) |
+| Portfolio optimization | `decision.optimize.portfolio_weights` (mean-variance) |
+| Multi-objective trade-offs | `decision.optimize.pareto_front` |
+| Shadow prices / opportunity cost | `decision.optimize.shadow_prices` on a solved LP |
+| Inventory optimization | `decision.inventory.newsvendor` / `eoq` / `safety_stock` / `reorder_point` |
+| Capacity & queueing (Erlang C) | `decision.capacity.erlang_c` / `required_servers` |
+| Game theory / competitive response | `decision.game.pure_nash` / `mixed_nash_2x2` / `iterated_dominance` / `best_response_dynamics` |
+| Hierarchical forecast reconciliation | `forecasting.hierarchy.reconcile` (ols / bottom-up / top-down) + `coherence_error` |
+| Survival analysis (churn timing, censoring) | `modeling.survival.kaplan_meier` / `cox_ph` / `median_survival` / `restricted_mean_survival` |
+| Recommendation systems | `modeling.recommend.ItemItemRecommender` (+ `popularity_baseline`); evaluate with `evaluate.ranking_metrics` |
+| Ranking quality (NDCG/MRR) | `evaluate.ranking_metrics` |
+| Market basket / association rules | `analytics.basket.frequent_itemsets` / `association_rules` |
+| Network & graph analytics | `analytics.graph`: `degree_centrality` / `pagerank` / `connected_components` / `shortest_paths` / `minimum_spanning_tree_edges` / `max_flow` |
+| Monotonicity & business-rule validation | `modeling.checks.monotonicity` / `expected_directions` / `prediction_bounds`; data rules → `features.validate.check_rules` |
+| Model robustness / prediction consistency | `modeling.checks.perturbation_stability` |
+| Counterfactual explanations | `modeling.interpret.counterfactual` (actionable levers only) |
+| Uncertainty quantification for predictions | `modeling.interpret.conformal_intervals` (distribution-free); forecast intervals → `predict_interval`; bootstrap → `stats.bootstrap_ci` |
+| Confidence scoring / triage routing | `modeling.interpret.confidence_score` |
+| Early warning / control charts | `monitor.control_limits` / `ewma_alerts` (+ `drift_report` for the follow-up) |
 | Entropy / cross-entropy / KL / information gain | `stats.entropy`; cross-entropy = `log_loss` in `evaluate.classification_metrics`; `stats.kl_divergence` (+ `monitor.psi`); `stats.information_gain` / `mutual_information` |
 
 Out of scope by design: deep learning (CNNs/RNNs/transformers — this workspace is tabular/text/geo;
@@ -590,4 +861,11 @@ Out of scope by design: deep learning (CNNs/RNNs/transformers — this workspace
 dependencies (Prophet → covered by `ets`/`sarimax` + holiday flags; causal forests → start with
 `subgroup_effects` / `TLearner`; UMAP → `tsne`; LIME → the SHAP charts cover local explanations;
 PyMC/Stan → `bayes.mcmc_sample` for small problems; ruptures → `diagnostics.change_points`;
-networkx DAG tooling → `viz.conceptual.dag`).
+networkx → `analytics.graph` for analytics, `viz.conceptual.dag` for DAG sketches; lifelines →
+the statsmodels-backed `modeling.survival`; mlxtend → `analytics.basket`; hierarchicalforecast →
+`forecasting.hierarchy`; MAPIE → `interpret.conformal_intervals`; dice-ml →
+`interpret.counterfactual`; cvxpy/OR-tools/gurobi → the scipy-backed `decision.optimize`).
+Full reinforcement learning and agent-based modeling are also out: `decision.bandits` is the
+in-stack online learner, `pricing.optimize.dynamic_prices` the planned sequential decision, and
+`decision.simulate` + `decision.game.best_response_dynamics` cover the simulation questions ABM
+usually answers ("digital twin" asks, at this scale, are those two plus a good value function).

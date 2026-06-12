@@ -14,11 +14,11 @@ _CONFIGURED = False
 
 
 def configure(*, level: str = "INFO") -> None:
-    """Load ``conf/logging.yaml`` if present, else a sensible default. Idempotent."""
+    """Load ``config/logging.yaml`` if present, else a sensible default. Idempotent."""
     global _CONFIGURED
     if _CONFIGURED:
         return
-    config_path = ROOT / "conf" / "logging.yaml"
+    config_path = ROOT / "config" / "logging.yaml"
     if config_path.is_file():
         with config_path.open(encoding="utf-8") as handle:
             logging.config.dictConfig(yaml.safe_load(handle))

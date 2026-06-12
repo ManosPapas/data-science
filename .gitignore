@@ -2,7 +2,7 @@
 .env
 .env.*
 !.env.example
-conf/*.local.yaml
+config/*.local.yaml
 
 # --- Model store (artifacts) ---
 models/

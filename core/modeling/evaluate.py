@@ -222,3 +222,47 @@ def rfecv_scores(
         np.asarray(search.cv_results_["std_test_score"], dtype=float),
         selected,
     )
+
+
+def ranking_metrics(relevance: ArrayLike, scores: ArrayLike, *, k: int = 10) -> dict[str, float]:
+    """Ranking quality at cut-off ``k``: NDCG, precision@k, recall@k, MRR (means over queries).
+
+    Inputs are (queries x items) matrices — one row per user/query — of true relevance (binary
+    or graded) and model scores; 1-D inputs are treated as a single query. Classification
+    metrics ignore *order*; these score what a recommender/search ranking actually serves.
+    Rows without any relevant item are skipped (nothing to find).
+    """
+    rel = np.atleast_2d(np.asarray(relevance, dtype=float))
+    sco = np.atleast_2d(np.asarray(scores, dtype=float))
+    if rel.shape != sco.shape:
+        raise ValueError("relevance and scores must have the same shape")
+    if k < 1:
+        raise ValueError("k must be at least 1")
+    ndcg, precision, recall, mrr, kept = [], [], [], [], 0
+    discounts = 1.0 / np.log2(np.arange(2, rel.shape[1] + 2))
+    for row_rel, row_sco in zip(rel, sco, strict=True):
+        total_relevant = float((row_rel > 0).sum())
+        if total_relevant == 0:
+            continue
+        kept += 1
+        order = np.argsort(row_sco)[::-1]
+        ranked = row_rel[order]
+        ideal = np.sort(row_rel)[::-1]
+        top = min(k, ranked.size)
+        dcg = float(np.sum(ranked[:top] * discounts[:top]))
+        idcg = float(np.sum(ideal[:top] * discounts[:top]))
+        ndcg.append(dcg / idcg if idcg > 0 else 0.0)
+        hits = float((ranked[:top] > 0).sum())
+        precision.append(hits / k)
+        recall.append(hits / total_relevant)
+        first = np.flatnonzero(ranked > 0)
+        mrr.append(1.0 / (first[0] + 1.0) if first.size else 0.0)
+    if kept == 0:
+        raise ValueError("no query had a relevant item — ranking quality is undefined")
+    return {
+        f"ndcg@{k}": float(np.mean(ndcg)),
+        f"precision@{k}": float(np.mean(precision)),
+        f"recall@{k}": float(np.mean(recall)),
+        "mrr": float(np.mean(mrr)),
+        "queries": float(kept),
+    }

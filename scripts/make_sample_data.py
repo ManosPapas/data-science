@@ -25,7 +25,7 @@ import polars as pl
 from core.config import ROOT
 from core.io.writers import write_csv, write_parquet
 
-SEED = 42  # matches conf/config.yaml run.seed
+SEED = 42  # matches config/config.yaml run.seed
 RAW = ROOT / "data" / "raw"
 
 SEGMENTS = ["retail", "sme", "corporate", "wealth"]

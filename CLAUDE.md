@@ -25,7 +25,7 @@ tomorrow, it lives in the package with a test — not in a notebook cell.
 | Concern | Tool |
 |---|---|
 | DataFrames / compute | **Polars** (lazy/streaming) + **DuckDB** (SQL over files, out-of-core) |
-| Config & secrets | **pydantic-settings**; secrets in `.env` / gitignored `conf/*.local.yaml`; non-secret in `conf/*.yaml` |
+| Config & secrets | **pydantic-settings**; secrets in `.env` / gitignored `config/*.local.yaml`; non-secret in `config/*.yaml` |
 | Notebooks | **jupytext** (pair to `.py`) + **nbstripout** (strip outputs) |
 | Dependencies | **uv** (+ committed lockfile) |
 | Quality | **ruff** (lint+format), **mypy** (strict), **pytest**, **pre-commit** |
@@ -67,7 +67,7 @@ cross-cutting boilerplate is owned by a decorator or shared base, not repeated.
 - **Prefer Parquet** over CSV for anything that persists.
 - **Parameterize all SQL** — bind values (`:param`), never string-format them into the query.
 - **One typed loader per data source** (load → pin schema → return), reused everywhere.
-- **Secrets never in git**: app env in `.env`, connection secrets in gitignored `conf/*.local.yaml`;
+- **Secrets never in git**: app env in `.env`, connection secrets in gitignored `config/*.local.yaml`;
   read through `core.config` (`get_settings` / `get_connection` / `get_api`). One typed loader per source.
 - **Promote** reusable notebook code into `core/` and import it back.
 - Cache expensive pulls to Parquet rather than re-querying.
@@ -86,32 +86,49 @@ cross-cutting boilerplate is owned by a decorator or shared base, not repeated.
 ## Project structure (target)
 
 ```
-conf/        versioned, non-secret config (YAML): config.yaml, databases.yaml, logging.yaml
+config/      versioned, non-secret config (YAML): config.yaml, databases.yaml, logging.yaml
 data/        gitignored datasets: raw/ interim/ processed/ external/
 notebooks/   jupytext-paired exploration — commit the .py, outputs stripped
 sql/         .sql files grouped by domain; parameterized
 scripts/     one-off / dev scripts (e.g. sample-data generation)
 core/        the package (flat layout at the repo root — no src/ wrapper)
-  config.py     typed settings from .env + conf/*.yaml (single get_settings entry point)
+  config.py     typed settings from .env + config/*.yaml (single get_settings entry point)
   prelude.py    one-line notebook toolkit: from core.prelude import *
   METHODS.md    reference for every stats/ML function: when, how, what it offers statistically
   io/           readers, writers, parquet cache, typed source catalog (Polars/DuckDB)
   db/           pooled engines, parameterized typed query loaders
   api/          HTTP + GraphQL clients (auth, retries, REST & cursor pagination)
-  features/     stateless transforms: clean, transform, temporal, period (MoM/QoQ/YoY), text, geo, validate
+  features/     stateless transforms: clean, transform, temporal, period (MoM/QoQ/YoY), text, geo,
+                validate (schema + business-rule checks)
   analytics/    stats (summaries/distributions/MLE fits/effects/tests/CIs+bootstrap/info theory),
                 regression (OLS/GLM/fixed/mixed fits + VIF/Breusch-Pagan/Durbin-Watson checks),
                 bayes (conjugate posteriors, hierarchical shrinkage, MCMC), experiment (A/B +
                 Bayesian A/B, SRM, CUPED, mSPRT), causal (DiD/PSM/IPW/IV/ITT-TOT/RDD/synthetic
-                control/subgroups/uplift models + Qini)
+                control/subgroups/uplift models + Qini), curves (derivatives/extrema/inflection/
+                convexity/response curves), drivers (change & price-volume-mix decomposition,
+                revenue leakage), risk (VaR/CVaR/drawdown/Sharpe/Sortino/target probabilities),
+                graph (centrality/pagerank/components/paths/MST/max-flow), basket (frequent
+                itemsets + association rules)
   modeling/     registry (make_model), train (fit/predict/cross-val/partial_fit), tune, ensemble,
-                imbalance, evaluate + compare (+ curves/permutation importance/RFECV), persist,
-                split, preprocess, segment (clustering/PCA/t-SNE), anomaly, monitor (PSI/KS/label drift)
-  decision/     contextual bandits (epsilon-greedy, Thompson, UCB, LinUCB) + optimization (LP,
-                assignment) + scenario (expected utility, scenario & sensitivity analysis)
+                imbalance, evaluate + compare (+ curves/permutation importance/RFECV/ranking
+                metrics), persist, split, preprocess, segment (clustering/PCA/t-SNE), anomaly,
+                monitor (PSI/KS/label drift + control charts/EWMA early warning), survival
+                (Kaplan-Meier/Cox/RMST), recommend (item-item CF + popularity baseline), checks
+                (monotonicity/bounds/perturbation stability), interpret (counterfactuals,
+                conformal intervals, confidence scores)
+  decision/     contextual bandits (epsilon-greedy, Thompson, UCB, LinUCB) + optimization (LP +
+                shadow prices, MILP/knapsack, nonlinear, assignment, portfolio, Pareto front,
+                stochastic/robust) + scenario (expected utility, scenario & sensitivity analysis)
+                + simulate (Monte Carlo with correlated inputs, stress tests, path simulation)
+                + inventory (newsvendor/EOQ/safety stock) + capacity (Erlang C staffing)
+                + game (Nash equilibria, dominance, best-response dynamics)
   forecasting/  classical (arima/sarimax, ets) + ml-reduction forecasters (+ prediction intervals)
-                + diagnostics (stationarity/trend/seasonality/change points) + rolling-origin backtest
-  pricing/      demand elasticity (log-log) + price/revenue optimization (capability subpackage)
+                + diagnostics (stationarity/trend/seasonality/change points) + rolling-origin
+                backtest + hierarchy (coherent reconciliation: ols/bottom-up/top-down)
+  pricing/      elasticity (estimation+CIs, cross-price, segments, rolling/drift, nonlinearity,
+                decomposition) + demand (linear/logit curves, WTP, Van Westendorp) + market
+                (equilibrium, censored-demand unconstraining, saturation, share/HHI) + optimize
+                (optimal/markup prices, marginal economics, dynamic-pricing DP)
   kpi/          business KPIs: financial (revenue/economy), behaviour (GA/marketing), profit (cost-sensitive)
   viz/          base.py = @chart decorator + theme + grid; static charts by group:
                 eda, model, cluster, explain, timeseries; plus interactive (Plotly,

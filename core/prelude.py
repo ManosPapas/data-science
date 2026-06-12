@@ -14,14 +14,25 @@ import polars as pl
 import polars.selectors as cs
 
 from core import pricing
-from core.analytics import bayes, causal, experiment, regression, stats
+from core.analytics import (
+    basket,
+    bayes,
+    causal,
+    curves,
+    drivers,
+    experiment,
+    graph,
+    regression,
+    risk,
+    stats,
+)
 from core.api.client import get_client, paginate
 from core.api.graphql import graphql, paginate_graphql
 from core.db.engine import get_engine
 from core.db.query import load_sql_file, read_sql, write_sql
-from core.decision import bandits, optimize, scenario
+from core.decision import bandits, capacity, game, inventory, optimize, scenario, simulate
 from core.features import clean, geo, period, temporal, text, transform, validate
-from core.forecasting import backtest, diagnostics
+from core.forecasting import backtest, diagnostics, hierarchy
 from core.forecasting.models import make_forecaster
 from core.io import catalog
 from core.io.cache import cached
@@ -38,16 +49,20 @@ from core.io.writers import write_csv, write_excel, write_parquet
 from core.kpi import behaviour, financial, profit
 from core.modeling import (
     anomaly,
+    checks,
     compare,
     ensemble,
     evaluate,
     imbalance,
+    interpret,
     monitor,
     persist,
     preprocess,
+    recommend,
     registry,
     segment,
     split,
+    survival,
     train,
     tune,
 )
@@ -70,29 +85,39 @@ __all__ = [
     "backtest",
     "bandits",
     "base",
+    "basket",
     "bayes",
     "behaviour",
     "cached",
+    "capacity",
     "catalog",
     "causal",
+    "checks",
     "clean",
     "cluster",
     "compare",
     "conceptual",
     "cs",
+    "curves",
     "diagnostics",
+    "drivers",
     "eda",
     "ensemble",
     "evaluate",
     "experiment",
     "explain",
     "financial",
+    "game",
     "geo",
     "get_client",
     "get_engine",
+    "graph",
     "graphql",
+    "hierarchy",
     "imbalance",
     "interactive",
+    "interpret",
+    "inventory",
     "load_sql_file",
     "make_forecaster",
     "memory_report",
@@ -116,15 +141,19 @@ __all__ = [
     "read_ndjson",
     "read_parquet",
     "read_sql",
+    "recommend",
     "registry",
     "regression",
     "report",
+    "risk",
     "scan_parquet",
     "scenario",
     "segment",
     "set_theme",
+    "simulate",
     "split",
     "stats",
+    "survival",
     "temporal",
     "text",
     "timeseries",

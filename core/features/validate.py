@@ -46,3 +46,31 @@ def check_schema(
     if problems and raise_on_error:
         raise ValueError("schema validation failed:\n  - " + "\n  - ".join(problems))
     return problems
+
+
+def check_rules(
+    df: pl.DataFrame, rules: Mapping[str, pl.Expr], *, raise_on_error: bool = False
+) -> pl.DataFrame:
+    """Business-rule validation: named boolean expressions that must hold on every row.
+
+    Each rule is a Polars predicate, e.g. ``{"price covers cost": pl.col("price") >=
+    pl.col("unit_cost"), "discount sane": pl.col("discount").is_between(0, 0.5)}``. Nulls count
+    as violations (unknown is not compliant). Returns one row per rule with the violation count
+    and share — enforce as a pipeline gate with ``raise_on_error=True``.
+    """
+    rows = []
+    for name, expr in rules.items():
+        violations = int(df.select((~expr).fill_null(True).sum()).item())
+        rows.append(
+            {
+                "rule": name,
+                "violations": violations,
+                "share": violations / df.height if df.height else 0.0,
+                "passed": violations == 0,
+            }
+        )
+    result = pl.DataFrame(rows).sort("violations", descending=True)
+    if raise_on_error and result["violations"].sum() > 0:
+        failing = result.filter(~pl.col("passed"))["rule"].to_list()
+        raise ValueError(f"business rules failed: {failing}")
+    return result

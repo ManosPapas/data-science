@@ -7,6 +7,7 @@ column. Standard operating read on PSI: < 0.1 stable, 0.1-0.2 drifting, > 0.2 dr
 from __future__ import annotations
 
 from collections.abc import Sequence
+from dataclasses import dataclass
 
 import numpy as np
 import polars as pl
@@ -93,3 +94,69 @@ def drift_report(
             }
         )
     return pl.DataFrame(rows).sort("psi", descending=True)
+
+
+@dataclass(frozen=True)
+class ControlLimits:
+    """Shewhart control band derived from a stable baseline period."""
+
+    center: float
+    lower: float
+    upper: float
+
+
+def control_limits(baseline: ArrayLike, *, sigmas: float = 3.0) -> ControlLimits:
+    """Mean ± k·sigma limits from an in-control baseline — the classic process-watch band.
+
+    Points outside the band are signals, not noise (at 3-sigma, ~0.3% false alarms on a stable
+    normal process). Compute the limits on a period you *trust*, then judge fresh data against
+    them — recomputing limits on drifting data hides the drift.
+    """
+    x = np.asarray(baseline, dtype=float)
+    if x.size < 2:
+        raise ValueError("need at least 2 baseline points")
+    center = float(x.mean())
+    spread = float(x.std(ddof=1))
+    return ControlLimits(center, center - sigmas * spread, center + sigmas * spread)
+
+
+def ewma_alerts(
+    values: ArrayLike,
+    baseline: ArrayLike,
+    *,
+    lam: float = 0.2,
+    sigmas: float = 3.0,
+) -> pl.DataFrame:
+    """EWMA control chart — the early-warning system for slow drifts a Shewhart band misses.
+
+    Each point is an exponentially weighted average (memory ``lam``: smaller = longer memory =
+    more sensitive to small persistent shifts); limits widen to their asymptote as the window
+    fills. ``alert`` marks the first symptoms of a metric quietly walking away from baseline —
+    fire a drift investigation (``drift_report``) when alerts persist.
+    """
+    if not 0.0 < lam <= 1.0:
+        raise ValueError("lam must be in (0, 1]")
+    base = np.asarray(baseline, dtype=float)
+    if base.size < 2:
+        raise ValueError("need at least 2 baseline points")
+    x = np.asarray(values, dtype=float)
+    center = float(base.mean())
+    spread = float(base.std(ddof=1))
+    ewma = np.empty(x.size)
+    level = center
+    for i, value in enumerate(x):
+        level = lam * value + (1.0 - lam) * level
+        ewma[i] = level
+    steps = np.arange(1, x.size + 1)
+    width = sigmas * spread * np.sqrt(lam / (2.0 - lam) * (1.0 - (1.0 - lam) ** (2.0 * steps)))
+    lower, upper = center - width, center + width
+    return pl.DataFrame(
+        {
+            "t": np.arange(x.size),
+            "value": x,
+            "ewma": ewma,
+            "lower": lower,
+            "upper": upper,
+            "alert": (ewma < lower) | (ewma > upper),
+        }
+    )

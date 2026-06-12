@@ -1,6 +1,6 @@
 """GraphQL over the configured httpx clients — one POST, fetch exactly the fields you need.
 
-Reuses a named API's config (base_url + auth) from ``conf/apis.yaml`` — point ``base_url`` at the
+Reuses a named API's config (base_url + auth) from ``config/apis.yaml`` — point ``base_url`` at the
 GraphQL endpoint. No extra dependency: a GraphQL call is a JSON POST of ``{query, variables}``.
 """
 

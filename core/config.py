@@ -1,8 +1,8 @@
 """Typed settings + named database/API connections.
 
-Non-secret config and connection *templates* live in committed ``conf/*.yaml``. Real secrets
-(passwords, tokens) go in gitignored ``conf/*.local.yaml`` of the same shape and are deep-merged on
-top — so nothing secret is ever committed. App-level environment still comes from ``.env``.
+Non-secret config and connection *templates* live in committed ``config/*.yaml``. Real secrets
+(passwords, tokens) go in gitignored ``config/*.local.yaml`` of the same shape and are deep-merged
+on top — so nothing secret is ever committed. App-level environment still comes from ``.env``.
 """
 
 from __future__ import annotations
@@ -16,7 +16,7 @@ from pydantic import BaseModel, ConfigDict, Field, SecretStr
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 ROOT = Path(__file__).resolve().parents[1]
-CONF_DIR = ROOT / "conf"
+CONF_DIR = ROOT / "config"
 
 
 def _read_yaml(path: Path) -> dict[str, Any]:
@@ -38,14 +38,14 @@ def _deep_merge(base: dict[str, Any], overlay: dict[str, Any]) -> dict[str, Any]
 
 
 def _merged(name: str) -> dict[str, Any]:
-    """``conf/<name>.yaml`` with gitignored ``conf/<name>.local.yaml`` deep-merged on top."""
+    """``config/<name>.yaml`` with gitignored ``config/<name>.local.yaml`` deep-merged on top."""
     return _deep_merge(
         _read_yaml(CONF_DIR / f"{name}.yaml"), _read_yaml(CONF_DIR / f"{name}.local.yaml")
     )
 
 
 class Settings(BaseSettings):
-    """App-level settings from ``.env`` (connection secrets live in conf/*.local.yaml)."""
+    """App-level settings from ``.env`` (connection secrets live in config/*.local.yaml)."""
 
     model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8", extra="ignore")
 
@@ -88,16 +88,16 @@ class ApiConfig(BaseModel):
 
 
 def get_connection(name: str) -> ConnectionConfig:
-    """Return the named database connection from ``conf/databases(.local).yaml``."""
+    """Return the named database connection from ``config/databases(.local).yaml``."""
     blocks = _merged("databases")
     if name not in blocks:
-        raise KeyError(f"connection {name!r} not found in conf/databases.yaml")
+        raise KeyError(f"connection {name!r} not found in config/databases.yaml")
     return ConnectionConfig(**{key.lower(): value for key, value in blocks[name].items()})
 
 
 def get_api(name: str) -> ApiConfig:
-    """Return the named API config from ``conf/apis(.local).yaml``."""
+    """Return the named API config from ``config/apis(.local).yaml``."""
     blocks = _merged("apis")
     if name not in blocks:
-        raise KeyError(f"api {name!r} not found in conf/apis.yaml")
+        raise KeyError(f"api {name!r} not found in config/apis.yaml")
     return ApiConfig(**{key.lower(): value for key, value in blocks[name].items()})

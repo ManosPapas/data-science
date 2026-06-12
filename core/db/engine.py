@@ -1,4 +1,4 @@
-"""Pooled SQLAlchemy engines built from the named connections in ``conf``.
+"""Pooled SQLAlchemy engines built from the named connections in ``config``.
 
 Targets SQL Server via ODBC (matching the classic SERVER/USER_NAME/PASSWORD/DATABASE/DRIVER block).
 Other dialects can be supported by extending the URL built here.

@@ -1,4 +1,4 @@
-"""HTTP API clients built from the named configs in ``conf``, with auth + transport retries."""
+"""HTTP API clients built from the named configs in ``config``, with auth + transport retries."""
 
 from __future__ import annotations
 

@@ -31,10 +31,17 @@ type-hinted, tested, and importable in one line from notebooks (`from core.prelu
 | **Analyze** | `analytics.stats` | summaries, distributions, hypothesis tests, effect sizes, mutual information, power |
 | | `analytics.experiment` | A/B analysis for means and conversions (lift, CI, verdict), SRM check, CUPED variance reduction, always-valid mSPRT (safe peeking) |
 | | `analytics.causal` | difference-in-differences, uplift, propensity scores + matching |
-| **Model** | `modeling` | 40+ models (`registry`), leakage-free `split`/`preprocess`, `train`, `tune`, `compare` (leaderboard + paired tests), `evaluate`, `ensemble`, `imbalance`, `segment` (clustering/PCA), `anomaly`, drift `monitor` (PSI/KS), versioned `persist` |
-| **Forecast** | `forecasting` | one interface over baselines, ARIMA/SARIMAX, ETS, and ML-reduction; rolling-origin backtest |
-| **Decide** | `decision` | contextual bandits (ε-greedy, Thompson, UCB1, LinUCB) and optimization (LP, assignment) |
-| **Price** | `pricing` | demand elasticity estimation (log-log) + revenue/profit-maximizing price optimization |
+| | `analytics.curves` | numerical derivatives, local maxima/minima, inflection points, convexity, response curves |
+| | `analytics.drivers` | root-cause decomposition: segment contributions, price-volume-mix bridge, revenue-leakage detection |
+| | `analytics.risk` | VaR, expected shortfall (CVaR), drawdown, downside deviation, Sharpe/Sortino, target probabilities |
+| | `analytics.graph` / `basket` | network analytics (centrality, PageRank, components, paths, max-flow) · market basket (frequent itemsets, association rules) |
+| **Model** | `modeling` | 40+ models (`registry`), leakage-free `split`/`preprocess`, `train`, `tune`, `compare` (leaderboard + paired tests), `evaluate` (+ ranking metrics), `ensemble`, `imbalance`, `segment` (clustering/PCA), `anomaly`, drift `monitor` (PSI/KS + EWMA early warning), versioned `persist` |
+| | `modeling.survival` | Kaplan-Meier retention curves, Cox hazard ratios, restricted mean survival (censoring-correct churn) |
+| | `modeling.recommend` | item-item collaborative filtering + popularity baseline |
+| | `modeling.checks` / `interpret` | monotonicity & business-logic validation, perturbation robustness · counterfactual explanations, conformal prediction intervals, confidence scores |
+| **Forecast** | `forecasting` | one interface over baselines, ARIMA/SARIMAX, ETS, and ML-reduction; rolling-origin backtest; hierarchical reconciliation (`hierarchy`) |
+| **Decide** | `decision` | contextual bandits (ε-greedy, Thompson, UCB1, LinUCB) · optimization (LP + shadow prices, MILP/knapsack, nonlinear, assignment, portfolio, Pareto fronts, stochastic/robust) · Monte Carlo `simulate` (correlated inputs, stress tests, paths) · `inventory` (newsvendor/EOQ/safety stock) · `capacity` (Erlang C) · `game` (Nash, best-response dynamics) |
+| **Price** | `pricing` | elasticity with CIs, cross-price & segment elasticity, drift monitoring · demand curves, willingness-to-pay, Van Westendorp · market equilibrium, censored-demand unconstraining, saturation, HHI · optimal/markup prices, marginal economics, dynamic-pricing DP |
 | **Measure** | `kpi` | ~30 financial KPIs, ~28 behaviour KPIs, and cost-sensitive `profit` curves |
 | **Visualize** | `viz` | a `@chart` decorator + theme + grid; static charts for EDA, models, clustering, explainability, time series — plus **interactive Plotly** charts (`viz.interactive`) |
 | **Utilities** | `utils` | memory profiling, structured logging, HTML reports |
@@ -107,7 +114,7 @@ Confirm it worked: `python -c "import core; print('ok')"`, then **[run the noteb
 
 ## Example notebooks
 
-Six end-to-end notebooks under `notebooks/`, each a `load → inspect → analyze → visualize`
+Twenty-one end-to-end notebooks under `notebooks/`, each a `load → inspect → analyze → visualize`
 narrative that delegates every non-trivial step to a tested `core` function:
 
 | Notebook | Demonstrates |
@@ -118,6 +125,21 @@ narrative that delegates every non-trivial step to a tested `core` function:
 | `04_segmentation_and_experiments` | k-means (elbow/silhouette) + PCA, anomaly detection, an A/B test with power analysis, and a causal cross-check |
 | `05_forecasting` | Decomposition/ACF/PACF → time features → forecaster bake-off on a holdout → rolling-origin backtest |
 | `06_scale_lazy_duckdb` | The headline GB-scale path: lazy Polars scan-with-pushdown + DuckDB SQL straight over Parquet/CSV (out-of-core) |
+| `07_statistical_inference` | Distributions & MLE fits, hypothesis tests, effect sizes, CIs & bootstrap, power and sample-size design |
+| `08_regression_inference` | OLS/GLM for *inference*, fixed vs mixed effects, and the assumption checks (VIF, Breusch-Pagan, Durbin-Watson) |
+| `09_causal_inference` | DiD, propensity matching/IPW, IV, RDD, synthetic control, uplift models + Qini |
+| `10_bayesian_methods` | Conjugate posteriors, hierarchical shrinkage, MCMC, Bayesian A/B decisions |
+| `11_timeseries_diagnostics` | Stationarity (ADF/KPSS), ACF/PACF, seasonal decomposition, trend tests, change points |
+| `12_decision_and_pricing` | Elasticity → optimal price, profit-based churn threshold, scenarios & tornado, expected utility, LP + assignment, bandit shoot-out |
+| `13_demand_elasticity_wtp` | Elasticity CIs & bootstrap, cross-price (substitutes/complements), segment & rolling elasticity, drift test, nonlinearity, decomposition, logit WTP, Van Westendorp |
+| `14_pricing_optimization_curves` | Marginal revenue/profit, curve calculus (extrema/convexity), linear-demand closed form, dynamic-pricing DP, revenue leakage, price/volume/mix bridge |
+| `15_market_supply_demand_ops` | Equilibrium & supply shocks, market balance, censored-demand unconstraining, saturation S-curve, HHI, newsvendor/EOQ/safety stock, Erlang-C staffing |
+| `16_monte_carlo_risk` | Correlated-input Monte Carlo, P10/P50/P90 & target probabilities, simulation tornado, stress tests, path fans, VaR/CVaR/drawdown, EWMA early warning |
+| `17_optimization_game_theory` | LP shadow prices, MILP/knapsack, nonlinear allocation, mean-variance portfolio, Pareto frontier, robust optimization, max-flow/MST, Nash equilibria & price-war dynamics |
+| `18_hierarchical_forecasting` | Per-node ETS forecasts → coherence gaps → bottom-up/top-down/OLS reconciliation scored on a holdout |
+| `19_recommendation_basket_graph` | Association rules (confidence vs lift), item-item recommender vs popularity with ranking metrics, co-purchase network (PageRank, communities) |
+| `20_churn_survival_analysis` | Censoring done right: Kaplan-Meier vs naive churn, retention by segment, Cox hazard ratios, RMST → CLV |
+| `21_model_governance_explainability` | Business-rule gates, monotonicity checks (catching a confounded model), perturbation robustness, counterfactual offers, conformal intervals, confidence routing |
 
 Notebooks **01** and **04** also render a couple of charts with interactive **Plotly**
 (`viz.interactive`) instead of matplotlib — a deliberate mix, to show both options without
@@ -138,7 +160,7 @@ load → inspect → analyze → visualize skeleton).
 - **Scan, don't load.** Start from lazy Polars (`scan_*`) or DuckDB over Parquet; select columns and
   filter rows early; choose dtypes deliberately (`Int32`/`Float32`/`Categorical`).
 - **Config & secrets** are typed via `core.config`: app env in `.env`, non-secret config in
-  `conf/*.yaml`, connection/API secrets in gitignored `conf/*.local.yaml` (deep-merged on top).
+  `config/*.yaml`, connection/API secrets in gitignored `config/*.local.yaml` (deep-merged on top).
   Read through `get_settings()` / `get_connection(name)` / `get_api(name)`.
 
 ---
@@ -146,7 +168,7 @@ load → inspect → analyze → visualize skeleton).
 ## Layout
 
 ```
-conf/        versioned, non-secret config (config.yaml, databases.yaml, apis.yaml, logging.yaml)
+config/      versioned, non-secret config (config.yaml, databases.yaml, apis.yaml, logging.yaml)
 data/        datasets (gitignored, rebuildable): raw/ interim/ processed/ external/
 notebooks/   jupytext-paired exploration — commit the .py, outputs stripped
 scripts/     one-off / dev scripts (e.g. make_sample_data.py)
@@ -185,7 +207,7 @@ make pipeline                      # the whole gate at once (see below)
 ```
 
 **`make pipeline`** is the one command that runs the whole local gate — ruff lint, format check,
-mypy, the unit suite, and all six example notebooks executed top-to-bottom (the real integration
+mypy, the unit suite, and every example notebook executed top-to-bottom (the real integration
 test). Without `make`, run the steps directly:
 
 ```powershell
@@ -214,7 +236,7 @@ broke.
   **`Python (data-science)`** (top-right kernel name → Change Kernel) and save.
 - **`data/` and `models/` are rebuildable caches** (gitignored). Re-run `make_sample_data.py` (or
   your own loaders) to repopulate; never commit data.
-- **Never commit secrets or notebook outputs.** Secrets live in `.env` / `conf/*.local.yaml`;
+- **Never commit secrets or notebook outputs.** Secrets live in `.env` / `config/*.local.yaml`;
   nbstripout (via pre-commit) strips outputs from committed notebooks.
 - **Parameterize SQL** — pass values as bound params (`:name`), never string-format them in.
 - **Optional extras**: `geo` (geopandas/shapely), `explain` (SHAP), `excel`, `gam` (pygam),
