@@ -14,7 +14,7 @@ from pathlib import Path
 import pytest
 
 ROOT = Path(__file__).resolve().parents[1]
-NOTEBOOKS = sorted((ROOT / "notebooks").glob("0*.py"))
+NOTEBOOKS = sorted((ROOT / "notebooks").glob("[0-9]*.py"))
 SAMPLE = ROOT / "data" / "raw" / "customers.parquet"
 # Cross-notebook artifacts: 02 consumes the clean frame 01 writes. In the full ordered run 01
 # produces it first; checked at call time so a -k/xdist subset skips with a clear message.
@@ -43,4 +43,4 @@ def test_notebook_runs(notebook: Path) -> None:
 
 def test_notebooks_discovered() -> None:
     # guard: an empty/renamed glob must fail loudly, not pass with zero notebooks run
-    assert len(NOTEBOOKS) >= 5
+    assert len(NOTEBOOKS) >= 12
