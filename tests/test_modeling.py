@@ -102,3 +102,72 @@ def test_persist_roundtrip(tmp_path: object, monkeypatch: object) -> None:
     assert saved.exists()
     assert persist.model_versions("demo") == [1]
     assert hasattr(persist.load_model("demo"), "predict")
+
+
+def test_permutation_importance_ranks_the_real_signal(rng: np.random.Generator) -> None:
+    x = pl.DataFrame({"signal": rng.normal(size=300), "noise": rng.normal(size=300)})
+    y = pl.Series("y", x["signal"].to_numpy() * 2.0 + rng.normal(scale=0.1, size=300))
+    model = train.fit(registry.make_model("linear", task="regression"), x, y)
+    importance = evaluate.permutation_importance(model, x, y, n_repeats=5, scoring="r2", seed=0)
+    assert importance["feature"][0] == "signal"
+    assert importance["importance_mean"][0] > importance["importance_mean"][1]
+
+
+def test_learning_and_validation_curve_scores(rng: np.random.Generator) -> None:
+    x = rng.normal(size=(120, 3))
+    y = (x[:, 0] > 0).astype(int)
+    model = registry.make_model("logistic", task="classification", max_iter=200)
+    sizes, train_scores, val_scores = evaluate.learning_curve_scores(model, x, y, cv=3)
+    assert sizes.shape[0] == train_scores.shape[0] == val_scores.shape[0] == 5
+    assert train_scores.shape[1] == 3  # one column per fold
+    values, train_curve, val_curve = evaluate.validation_curve_scores(
+        model, x, y, param_name="C", param_range=[0.01, 1.0, 100.0], cv=3
+    )
+    assert values.shape == (3,)
+    assert train_curve.shape == val_curve.shape == (3, 3)
+
+
+def test_rfecv_keeps_the_informative_features(rng: np.random.Generator) -> None:
+    x = pl.DataFrame(
+        {
+            "s1": rng.normal(size=250),
+            "s2": rng.normal(size=250),
+            "n1": rng.normal(size=250),
+            "n2": rng.normal(size=250),
+        }
+    )
+    y = pl.Series("y", x["s1"].to_numpy() + x["s2"].to_numpy() + rng.normal(scale=0.2, size=250))
+    result = evaluate.rfecv_scores(
+        registry.make_model("linear", task="regression"), x, y, cv=3, scoring="r2"
+    )
+    assert {"s1", "s2"} <= set(result.selected)
+    assert result.n_features.shape == result.mean_scores.shape == result.std_scores.shape
+
+
+def test_tsne_embeds_to_2d(rng: np.random.Generator) -> None:
+    coords = segment.tsne(rng.normal(size=(60, 4)), perplexity=10.0, seed=0)
+    assert coords.shape == (60, 2)
+    assert np.isfinite(coords).all()
+
+
+def test_preprocessor_strategy_options() -> None:
+    frame = pl.DataFrame({"a": [1.0, None, 3.0, 4.0], "b": ["x", "y", "x", None]}).to_pandas()
+    pre = preprocess.make_preprocessor(
+        numeric=["a"], categorical=["b"], imputer="knn", scaler="minmax", encoder="ordinal"
+    )
+    transformed = pre.fit_transform(frame)
+    assert transformed.shape == (4, 2)  # min-max scaled 'a' + ordinal-coded 'b'
+    assert np.isfinite(np.asarray(transformed, dtype=float)).all()
+
+
+def test_make_imputer_strategies_construct() -> None:
+    for strategy in ("mean", "median", "knn", "iterative"):
+        assert hasattr(preprocess.make_imputer(strategy), "fit")
+
+
+def test_target_encoder_consumes_y() -> None:
+    frame = pl.DataFrame({"c": ["a", "b"] * 20}).to_pandas()
+    y = np.array([1.0, 0.0] * 20)
+    pre = preprocess.make_preprocessor(categorical=["c"], encoder="target")
+    transformed = pre.fit_transform(frame, y)
+    assert transformed.shape == (40, 1)  # one numeric column, no one-hot explosion

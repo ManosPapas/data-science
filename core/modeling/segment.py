@@ -78,3 +78,20 @@ def pca(x: Any, *, n_components: int = 2) -> tuple[NDArray[np.float64], NDArray[
     model = PCA(n_components=n_components)
     coords = np.asarray(model.fit_transform(features), dtype=float)
     return coords, np.asarray(model.explained_variance_ratio_, dtype=float)
+
+
+def tsne(
+    x: Any, *, n_components: int = 2, perplexity: float = 30.0, seed: int = 42
+) -> NDArray[np.float64]:
+    """t-SNE embedding — non-linear, for *visualization* only (``viz.cluster.cluster_scatter``).
+
+    Where PCA preserves global variance, t-SNE preserves local neighbourhoods: tight groups are
+    meaningful, but inter-cluster distances, axes, and densities are not — never feed the coords
+    into clustering or distance computations. ``perplexity`` (5-50, < n rows) sets the
+    neighbourhood size; standardize features first, and PCA down to ~50 dims to speed up wide data.
+    """
+    from sklearn.manifold import TSNE
+
+    features = np.asarray(to_features(x))
+    model = TSNE(n_components=n_components, perplexity=perplexity, init="pca", random_state=seed)
+    return np.asarray(model.fit_transform(features), dtype=float)

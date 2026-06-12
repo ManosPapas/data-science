@@ -125,3 +125,45 @@ def explode_json(df: pl.DataFrame, column: str) -> pl.DataFrame:
     if df[column].dtype == pl.Utf8:
         df = df.with_columns(pl.col(column).str.json_decode())  # type: ignore[call-arg]
     return df.unnest(column)
+
+
+def frequency_encode(
+    df: pl.DataFrame, columns: Sequence[str], *, normalize: bool = False
+) -> pl.DataFrame:
+    """Add ``<col>_freq``: each category's row count (or share with ``normalize=True``).
+
+    Turns a high-cardinality categorical into one numeric column — common categories score high,
+    rare ones low — with no risk of target leakage (unlike target encoding, which lives in
+    ``modeling.preprocess`` because it must be fit on train only). In a strict train/test setup,
+    compute the frequencies on train and join them onto test.
+    """
+    counts = [pl.len().over(col).alias(f"{col}_freq") for col in columns]
+    if normalize:
+        counts = [(pl.len().over(col) / pl.len()).alias(f"{col}_freq") for col in columns]
+    return df.with_columns(counts)
+
+
+def group_rare(
+    df: pl.DataFrame, column: str, *, min_share: float = 0.01, label: str = "other"
+) -> pl.DataFrame:
+    """Lump categories holding less than ``min_share`` of rows into ``label``.
+
+    Rare levels carry too few observations to estimate anything from and bloat one-hot encodings;
+    pooling them trades a little detail for stabler estimates. The column comes back as Utf8 —
+    re-cast via ``clean.downcast`` if you want Categorical again.
+    """
+    share = pl.len().over(column) / pl.len()
+    value = pl.col(column).cast(pl.String)
+    return df.with_columns(
+        pl.when(share < min_share).then(pl.lit(label)).otherwise(value).alias(column)
+    )
+
+
+def add_interactions(df: pl.DataFrame, pairs: Sequence[tuple[str, str]]) -> pl.DataFrame:
+    """Add ``<a>_x_<b>`` product columns for each numeric pair.
+
+    Use when one variable's effect depends on another's level (non-additive effects, e.g.
+    days-before-departure x route-demand in pricing). Linear models can't discover interactions
+    on their own — you supply them; trees/boosting find their own, so skip these there.
+    """
+    return df.with_columns([(pl.col(a) * pl.col(b)).alias(f"{a}_x_{b}") for a, b in pairs])

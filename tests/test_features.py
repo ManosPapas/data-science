@@ -104,3 +104,29 @@ def test_validate_check_schema_reports_missing() -> None:
         pl.DataFrame({"a": [1, 2, 3]}), required=["a", "missing"], raise_on_error=False
     )
     assert any("missing" in p for p in problems)
+
+
+def test_add_missing_indicators_flags_only_null_columns() -> None:
+    out = clean.add_missing_indicators(pl.DataFrame({"a": [1, None, 3], "b": [1, 2, 3]}))
+    assert out["a_missing"].to_list() == [False, True, False]
+    assert "b_missing" not in out.columns
+
+
+def test_frequency_encode_counts_and_shares() -> None:
+    df = pl.DataFrame({"c": ["x", "x", "y", "z"]})
+    assert transform.frequency_encode(df, ["c"])["c_freq"].to_list() == [2, 2, 1, 1]
+    shares = transform.frequency_encode(df, ["c"], normalize=True)
+    assert shares["c_freq"].to_list() == [0.5, 0.5, 0.25, 0.25]
+
+
+def test_group_rare_lumps_thin_categories() -> None:
+    df = pl.DataFrame({"c": ["a"] * 95 + ["b"] * 4 + ["z"]})
+    out = transform.group_rare(df, "c", min_share=0.05)
+    assert set(out["c"].unique().to_list()) == {"a", "other"}
+
+
+def test_add_interactions_multiplies_pairs() -> None:
+    out = transform.add_interactions(
+        pl.DataFrame({"a": [2.0, 3.0], "b": [10.0, 10.0]}), [("a", "b")]
+    )
+    assert out["a_x_b"].to_list() == [20.0, 30.0]

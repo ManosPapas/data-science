@@ -1,10 +1,10 @@
-"""Tests for forecasting models, prediction intervals, and backtesting."""
+"""Tests for forecasting models, prediction intervals, backtesting, and diagnostics."""
 
 from __future__ import annotations
 
 import numpy as np
 
-from core.forecasting import backtest
+from core.forecasting import backtest, diagnostics
 from core.forecasting.models import make_forecaster
 
 
@@ -87,3 +87,26 @@ def test_rolling_origin(rng: np.random.Generator) -> None:
     )
     assert {"origin", "h", "actual", "pred"} <= set(result.columns)
     assert result.height > 0
+
+
+def test_stationarity_tests_agree_on_obvious_cases(rng: np.random.Generator) -> None:
+    stationary = rng.normal(0.0, 1.0, 300)
+    walk = np.cumsum(rng.normal(0.0, 1.0, 300))
+    assert diagnostics.adf_test(stationary).p_value < 0.05  # rejects the unit root
+    assert diagnostics.adf_test(walk).p_value > 0.05
+    assert diagnostics.kpss_test(stationary).p_value >= 0.05  # keeps the stationary null
+    assert diagnostics.kpss_test(walk).p_value < 0.05
+    assert diagnostics.stationarity_report(stationary)["verdict"] == "stationary"
+    assert "difference" in str(diagnostics.stationarity_report(walk)["verdict"])
+
+
+def test_ljung_box_separates_noise_from_structure(rng: np.random.Generator) -> None:
+    assert diagnostics.ljung_box(rng.normal(0.0, 1.0, 400)).p_value > 0.05
+    seasonal = np.sin(2 * np.pi * np.arange(400) / 12) + rng.normal(0.0, 0.1, 400)
+    assert diagnostics.ljung_box(seasonal, lags=12).p_value < 0.001
+
+
+def test_dominant_period_finds_the_cycle(rng: np.random.Generator) -> None:
+    t = np.arange(240)
+    y = 10.0 * np.sin(2 * np.pi * t / 12) + 0.3 * t + rng.normal(0.0, 1.0, t.size)
+    assert diagnostics.dominant_period(y) == 12

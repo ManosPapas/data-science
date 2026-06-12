@@ -95,6 +95,22 @@ def downcast(df: pl.DataFrame) -> pl.DataFrame:
     return out.with_columns(categoricals) if categoricals else out
 
 
+def add_missing_indicators(df: pl.DataFrame, columns: Sequence[str] | None = None) -> pl.DataFrame:
+    """Add a boolean ``<col>_missing`` flag per column with nulls (or per given column).
+
+    Missingness is often signal, not noise (a blank income field says something) — flag it
+    *before* imputing so the model keeps that information once the gap is filled. Pairs with
+    ``fill_missing`` here and ``modeling.preprocess`` imputers; see
+    ``stats.missingness_dependence`` for whether the missingness is random.
+    """
+    cols = (
+        list(columns)
+        if columns is not None
+        else [col for col in df.columns if df[col].null_count() > 0]
+    )
+    return df.with_columns([pl.col(col).is_null().alias(f"{col}_missing") for col in cols])
+
+
 def fill_missing(
     df: pl.DataFrame,
     *,

@@ -82,6 +82,49 @@ def missingness(df: pl.DataFrame) -> pl.DataFrame:
     )
 
 
+def missingness_dependence(df: pl.DataFrame, column: str) -> pl.DataFrame:
+    """Does ``column``'s missingness depend on other columns? (MCAR vs MAR triage.)
+
+    Compares every other column between rows where ``column`` is null and rows where it isn't —
+    Welch t for numeric, chi-square otherwise. Small p-values mean the data are missing *at random
+    given that column* (MAR) rather than completely at random (MCAR), so dropping rows or
+    mean-imputing would bias the analysis; impute conditionally or add a missing flag instead.
+    """
+    schema = {
+        "column": pl.String,
+        "test": pl.String,
+        "statistic": pl.Float64,
+        "p_value": pl.Float64,
+    }
+    flag = df[column].is_null()
+    rows: list[dict[str, Any]] = []
+    for other, dtype in df.schema.items():
+        if other == column:
+            continue
+        keep = df[other].is_not_null()
+        values, groups = df[other].filter(keep), flag.filter(keep)
+        n_missing = int(groups.sum())
+        if n_missing < 2 or groups.len() - n_missing < 2:
+            continue
+        if dtype.is_numeric():
+            test = "welch_t"
+            result = welch_t_test(
+                values.filter(groups).to_numpy(), values.filter(~groups).to_numpy()
+            )
+        else:
+            test = "chi_square"
+            result = chi_square(values.cast(pl.String).to_numpy(), groups.to_numpy())
+        rows.append(
+            {
+                "column": other,
+                "test": test,
+                "statistic": result.statistic,
+                "p_value": result.p_value,
+            }
+        )
+    return pl.DataFrame(rows, schema=schema).sort("p_value")
+
+
 def correlation(df: pl.DataFrame) -> pl.DataFrame:
     """Pearson correlation across numeric columns (rows containing nulls are dropped)."""
     numeric = df.select(cs.numeric()).drop_nulls()
@@ -152,10 +195,53 @@ def describe_distribution(data: Floats) -> dict[str, float]:
 
 
 def normality_test(data: Floats, *, method: str = "shapiro") -> TestResult:
-    """Test whether a sample is normally distributed ('shapiro' or 'dagostino')."""
+    """Test whether a sample is normal ('shapiro', 'dagostino', or 'ks').
+
+    'ks' is the Lilliefors-corrected Kolmogorov-Smirnov test (plain KS is anticonservative when
+    mean/std are estimated from the same sample). Shapiro-Wilk has the best power below ~5k rows.
+    """
     arr = np.asarray(data, dtype=float)
-    statistic, p_value = stats.normaltest(arr) if method == "dagostino" else stats.shapiro(arr)
+    if method == "ks":
+        from statsmodels.stats.diagnostic import lilliefors
+
+        statistic, p_value = lilliefors(arr, dist="norm")
+    elif method == "dagostino":
+        statistic, p_value = stats.normaltest(arr)
+    else:
+        statistic, p_value = stats.shapiro(arr)
     return TestResult(float(statistic), float(p_value))
+
+
+def fit_distribution(data: Floats, dist: str = "norm") -> dict[str, Any]:
+    """Fit a scipy distribution by maximum likelihood; params, log-likelihood, AIC, and KS fit.
+
+    ``dist`` is any scipy.stats name ('norm', 'lognorm', 'expon', 'gamma', 'weibull_min', ...).
+    ``params`` come back in scipy order ``(shape..., loc, scale)`` and plug straight into
+    ``scipy.stats.<dist>(*params)``. A small ``ks_p`` says the fitted shape still mismatches the
+    sample; compare candidates with :func:`best_distribution`.
+    """
+    arr = np.asarray(data, dtype=float)
+    model = getattr(stats, dist)
+    params = model.fit(arr)
+    loglik = float(np.sum(model.logpdf(arr, *params)))
+    ks_stat, ks_p = stats.kstest(arr, dist, args=params)
+    return {
+        "dist": dist,
+        "params": tuple(float(p) for p in params),
+        "loglik": loglik,
+        "aic": 2.0 * len(params) - 2.0 * loglik,
+        "ks_stat": float(ks_stat),
+        "ks_p": float(ks_p),
+    }
+
+
+def best_distribution(
+    data: Floats,
+    candidates: Sequence[str] = ("norm", "lognorm", "expon", "gamma", "weibull_min"),
+) -> pl.DataFrame:
+    """MLE-fit each candidate distribution and rank by AIC (best first)."""
+    fits = [fit_distribution(data, dist) for dist in candidates]
+    return pl.DataFrame([{k: v for k, v in f.items() if k != "params"} for f in fits]).sort("aic")
 
 
 def outlier_bounds(

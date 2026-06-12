@@ -32,6 +32,20 @@ def test_ks_drift(rng: np.random.Generator) -> None:
     assert monitor.ks_drift(baseline, rng.normal(2.0, 1.0, 800)).p_value < 0.001
 
 
+def test_label_drift_calm_then_fires(rng: np.random.Generator) -> None:
+    baseline = rng.choice(["a", "b"], size=2000, p=[0.7, 0.3])
+    same_mix = rng.choice(["a", "b"], size=2000, p=[0.7, 0.3])
+    shifted_mix = rng.choice(["a", "b"], size=2000, p=[0.5, 0.5])
+    assert monitor.label_drift(baseline, same_mix).p_value > 0.01
+    assert monitor.label_drift(baseline, shifted_mix).p_value < 0.001
+
+
+def test_label_drift_flags_a_brand_new_class() -> None:
+    baseline = np.array(["a", "b"] * 500)
+    fresh = np.array(["a", "b", "c"] * 300)
+    assert monitor.label_drift(baseline, fresh).p_value < 0.001
+
+
 def test_drift_report_flags_the_drifted_column(rng: np.random.Generator) -> None:
     baseline = pl.DataFrame({"a": rng.normal(0, 1, 1000), "b": rng.normal(5, 2, 1000)})
     current = pl.DataFrame({"a": rng.normal(0, 1, 1000), "b": rng.normal(9, 2, 1000)})

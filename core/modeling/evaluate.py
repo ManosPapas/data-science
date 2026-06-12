@@ -1,13 +1,26 @@
-"""Model metrics — dicts and a per-class report, paired with the viz.model charts."""
+"""Model metrics and diagnostics-compute — paired with the viz.model / viz.explain charts.
+
+Metric helpers return dicts/frames; the ``*_scores`` functions do the heavy refitting for the
+learning-curve, validation-curve, and feature-selection charts (compute here, plot in viz).
+"""
 
 from __future__ import annotations
 
+from dataclasses import dataclass
 from typing import Any
 
 import numpy as np
 import polars as pl
-from numpy.typing import ArrayLike
+from numpy.typing import ArrayLike, NDArray
 from sklearn import metrics
+
+from core.modeling.frames import to_features, to_target
+
+
+def _feature_names(features: Any, n_features: int) -> list[str]:
+    if hasattr(features, "columns"):
+        return [str(name) for name in features.columns]
+    return [f"x{i}" for i in range(n_features)]
 
 
 def regression_metrics(y_true: ArrayLike, y_pred: ArrayLike) -> dict[str, float | None]:
@@ -75,4 +88,137 @@ def pinball_loss(y_true: ArrayLike, y_pred: ArrayLike, *, alpha: float = 0.5) ->
         metrics.mean_pinball_loss(
             np.asarray(y_true, dtype=float), np.asarray(y_pred, dtype=float), alpha=alpha
         )
+    )
+
+
+# --- Diagnostics compute (feeds viz.model / viz.explain) ----------------------------------------
+
+
+def permutation_importance(
+    model: Any, x: Any, y: Any, *, n_repeats: int = 10, scoring: Any = None, seed: int = 42
+) -> pl.DataFrame:
+    """Model-agnostic importance: how much the score drops when one feature is shuffled.
+
+    Run on a *fitted* model with *held-out* data (on train it just mirrors overfitting). Unlike
+    impurity importances it isn't biased toward high-cardinality features, but correlated features
+    share credit — read clusters together. Returns (feature, importance_mean, importance_std)
+    sorted, ready for ``viz.explain.permutation_importance``.
+    """
+    from sklearn.inspection import permutation_importance as _sk_permutation
+
+    features = to_features(x)
+    result = _sk_permutation(
+        model, features, to_target(y), n_repeats=n_repeats, scoring=scoring, random_state=seed
+    )
+    names = _feature_names(features, np.asarray(features).shape[1])
+    frame = pl.DataFrame(
+        {
+            "feature": names,
+            "importance_mean": np.asarray(result.importances_mean, dtype=float),
+            "importance_std": np.asarray(result.importances_std, dtype=float),
+        }
+    )
+    return frame.sort("importance_mean", descending=True)
+
+
+def learning_curve_scores(
+    model: Any, x: Any, y: Any, *, cv: Any = 5, scoring: Any = None, sizes: ArrayLike | None = None
+) -> tuple[NDArray[np.float64], NDArray[np.float64], NDArray[np.float64]]:
+    """Train vs validation score as the training set grows — the bias/variance diagnostic.
+
+    Both curves converging low = high bias (underfitting: add features/complexity); a persistent
+    train-validation gap = high variance (overfitting: regularize, simplify, or get more data —
+    the curve shows whether more data would even help). Returns (train_sizes, train_scores,
+    val_scores) for ``viz.model.learning_curve``.
+    """
+    from sklearn.model_selection import learning_curve as _sk_learning_curve
+
+    train_sizes, train_scores, val_scores = _sk_learning_curve(
+        model,
+        to_features(x),
+        to_target(y),
+        cv=cv,
+        scoring=scoring,
+        train_sizes=np.linspace(0.1, 1.0, 5) if sizes is None else np.asarray(sizes, dtype=float),
+    )
+    return (
+        np.asarray(train_sizes, dtype=float),
+        np.asarray(train_scores, dtype=float),
+        np.asarray(val_scores, dtype=float),
+    )
+
+
+def validation_curve_scores(
+    model: Any,
+    x: Any,
+    y: Any,
+    *,
+    param_name: str,
+    param_range: ArrayLike,
+    cv: Any = 5,
+    scoring: Any = None,
+) -> tuple[NDArray[np.float64], NDArray[np.float64], NDArray[np.float64]]:
+    """Train vs validation score across one hyper-parameter — where overfitting starts.
+
+    The validation curve peaks at the complexity that generalizes best; past it, train keeps
+    rising while validation falls. Returns (param_values, train_scores, val_scores) for
+    ``viz.model.validation_curve``.
+    """
+    from sklearn.model_selection import validation_curve as _sk_validation_curve
+
+    train_scores, val_scores = _sk_validation_curve(
+        model,
+        to_features(x),
+        to_target(y),
+        param_name=param_name,
+        param_range=param_range,
+        cv=cv,
+        scoring=scoring,
+    )
+    return (
+        np.asarray(param_range, dtype=float),
+        np.asarray(train_scores, dtype=float),
+        np.asarray(val_scores, dtype=float),
+    )
+
+
+@dataclass(frozen=True)
+class FeatureSelectionResult:
+    """RFECV output: the CV curve (for the chart) plus the chosen feature subset."""
+
+    n_features: NDArray[np.int_]
+    mean_scores: NDArray[np.float64]
+    std_scores: NDArray[np.float64]
+    selected: list[str]
+
+
+def rfecv_scores(
+    model: Any,
+    x: Any,
+    y: Any,
+    *,
+    cv: Any = 5,
+    scoring: Any = None,
+    step: int = 1,
+    min_features: int = 1,
+) -> FeatureSelectionResult:
+    """Recursive feature elimination with CV — how many (and which) features earn their keep.
+
+    Drops the weakest feature(s) by ``coef_``/``feature_importances_``, re-scores, repeats; fewer
+    features cut variance and ease interpretation at a possible cost in bias. Feed ``n_features`` /
+    ``mean_scores`` / ``std_scores`` to ``viz.model.feature_selection_curve``; refit on
+    ``selected``.
+    """
+    from sklearn.feature_selection import RFECV
+
+    features = to_features(x)
+    search = RFECV(model, step=step, cv=cv, scoring=scoring, min_features_to_select=min_features)
+    search.fit(features, to_target(y))
+    names = _feature_names(features, int(search.n_features_in_))
+    selected = [name for name, keep in zip(names, search.support_, strict=True) if keep]
+    return FeatureSelectionResult(
+        np.asarray(search.cv_results_["n_features"], dtype=int),
+        np.asarray(search.cv_results_["mean_test_score"], dtype=float),
+        np.asarray(search.cv_results_["std_test_score"], dtype=float),
+        selected,
     )

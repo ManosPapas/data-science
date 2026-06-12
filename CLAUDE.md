@@ -94,18 +94,20 @@ scripts/     one-off / dev scripts (e.g. sample-data generation)
 core/        the package (flat layout at the repo root — no src/ wrapper)
   config.py     typed settings from .env + conf/*.yaml (single get_settings entry point)
   prelude.py    one-line notebook toolkit: from core.prelude import *
+  METHODS.md    reference for every stats/ML function: when, how, what it offers statistically
   io/           readers, writers, parquet cache, typed source catalog (Polars/DuckDB)
   db/           pooled engines, parameterized typed query loaders
   api/          HTTP + GraphQL clients (auth, retries, REST & cursor pagination)
   features/     stateless transforms: clean, transform, temporal, period (MoM/QoQ/YoY), text, geo, validate
-  analytics/    stats (summaries/distributions/effects/tests/MI/power), experiment (A/B, SRM,
-                CUPED, mSPRT), causal (DiD/PSM/uplift)
+  analytics/    stats (summaries/distributions/MLE fits/effects/tests/MI/power), regression
+                (OLS assumption checks: VIF/Breusch-Pagan/Durbin-Watson), experiment (A/B +
+                Bayesian A/B, SRM, CUPED, mSPRT), causal (DiD/PSM/IPW/IV/ITT-TOT/subgroups/uplift)
   modeling/     registry (make_model), train (fit/predict/cross-val/partial_fit), tune, ensemble,
-                imbalance, evaluate + compare, persist, split, preprocess, segment (clustering/PCA),
-                anomaly, monitor (PSI/KS drift)
+                imbalance, evaluate + compare (+ curves/permutation importance/RFECV), persist,
+                split, preprocess, segment (clustering/PCA/t-SNE), anomaly, monitor (PSI/KS/label drift)
   decision/     contextual bandits (epsilon-greedy, Thompson, UCB, LinUCB) + optimization (LP, assignment)
   forecasting/  classical (arima/sarimax, ets) + ml-reduction forecasters (+ prediction intervals)
-                + rolling-origin backtest
+                + stationarity/seasonality diagnostics + rolling-origin backtest
   pricing/      demand elasticity (log-log) + price/revenue optimization (capability subpackage)
   kpi/          business KPIs: financial (revenue/economy), behaviour (GA/marketing), profit (cost-sensitive)
   viz/          base.py = @chart decorator + theme + grid; static charts by group:

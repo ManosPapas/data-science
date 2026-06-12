@@ -42,6 +42,27 @@ def ks_drift(expected: ArrayLike, actual: ArrayLike) -> TestResult:
     return TestResult(float(result.statistic), float(result.pvalue))
 
 
+def label_drift(expected: ArrayLike, actual: ArrayLike) -> TestResult:
+    """Chi-square check that the class mix has not shifted (PSI/KS cover numeric columns only).
+
+    Pass the baseline and fresh *label* arrays — true labels when you have them (prior shift), or
+    predicted classes as the early proxy. A small p-value means the class proportions moved:
+    re-examine thresholds and consider retraining. Labels unseen in the baseline get a tiny floor
+    share so a brand-new class registers as drift instead of crashing the test.
+    """
+    from scipy.stats import chisquare
+
+    e = np.asarray(expected).astype(str)
+    a = np.asarray(actual).astype(str)
+    labels = np.unique(np.concatenate([e, a]))
+    expected_counts = np.array([(e == label).sum() for label in labels], dtype=float)
+    actual_counts = np.array([(a == label).sum() for label in labels], dtype=float)
+    shares = np.clip(expected_counts / expected_counts.sum(), 1e-6, None)
+    shares = shares / shares.sum()
+    result = chisquare(actual_counts, f_exp=actual_counts.sum() * shares)
+    return TestResult(float(result.statistic), float(result.pvalue))
+
+
 def drift_report(
     baseline: pl.DataFrame,
     current: pl.DataFrame,
