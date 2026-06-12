@@ -45,6 +45,24 @@ informed = bayes.beta_posterior(18, 120, prior=(8.0, 32.0))  # history: ~20% on 
 print(f"uniform prior : {flat.mean:.3f}  [{flat.lower:.3f}, {flat.upper:.3f}]")
 print(f"informed prior: {informed.mean:.3f}  [{informed.lower:.3f}, {informed.upper:.3f}]")
 
+# %%
+# Side by side with the frequentist Wilson interval on the same 18/120: numerically close here,
+# but only the credible interval licenses "the rate is in this range with 95% probability" —
+# and only the Bayesian version has a dial for prior knowledge.
+rate, wilson_lo, wilson_hi = stats.proportion_confidence_interval(18, 120)
+print(f"Wilson (frequentist): {rate:.3f}  [{wilson_lo:.3f}, {wilson_hi:.3f}]")
+
+# %%
+# Prior sensitivity — the report you attach when priors are debatable. With this much data the
+# posterior barely moves across a skeptic, a uniform, and an optimist: the data dominate.
+for label, prior in [
+    ("skeptic 10%", (4.0, 36.0)),
+    ("uniform", (1.0, 1.0)),
+    ("optimist 25%", (10.0, 30.0)),
+]:
+    post = bayes.beta_posterior(18, 120, prior=prior)
+    print(f"{label:12s} -> {post.mean:.3f}  [{post.lower:.3f}, {post.upper:.3f}]")
+
 # %% [markdown]
 # ## 3. The retention A/B, two ways — p-value vs decision quantities
 # Same data as notebook 04. The frequentist read lands exactly on the alpha = 0.05 fence and
@@ -103,6 +121,13 @@ print(
     "worst by shrunk rate:", league.sort("shrunk_rate", descending=True)["group"].head(3).to_list()
 )
 
+# %%
+# The shrinkage picture: every cell's raw rate vs its shrunk rate. Points off the diagonal are
+# being pulled toward the pooled mean — and the further out a raw rate sits, the harder it's
+# pulled (those are exactly the thin cells).
+fig, axes = base.grid(1, ncols=1)
+eda.scatter(league, "rate", "shrunk_rate")
+
 # %% [markdown]
 # ## 5. No closed form? MCMC
 # Posterior for the mean of log-spend under a normal likelihood with a flat prior — deliberately
@@ -126,6 +151,12 @@ t_mean, t_lo, t_hi = stats.mean_confidence_interval(log_spend)
 print(f"acceptance rate {acceptance:.0%}")
 print(f"MCMC posterior  {samples[:, 0].mean():.4f}  [{mcmc_lo:.4f}, {mcmc_hi:.4f}]")
 print(f"t interval      {t_mean:.4f}  [{t_lo:.4f}, {t_hi:.4f}]   (they should agree)")
+
+# %%
+# The posterior is a *distribution*, not a point — and the draws are ordinary data: histogram
+# them, quantile them, feed them into any downstream decision calculation.
+fig, axes = base.grid(1, ncols=1)
+eda.histogram(samples[:, 0], ax=axes[0], title="Posterior of mean log-spend (MCMC draws)")
 
 # %% [markdown]
 # **Takeaways:** the alert posterior (~17%) shows why base rates rule triage; thin-data rates get

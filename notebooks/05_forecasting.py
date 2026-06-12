@@ -33,6 +33,11 @@ daily.head()
 timeseries.seasonal_decomposition(y, period=7)
 
 # %%
+# The stationarity verdict justifies the d=1 in the ARIMA order below; notebook 11 runs the full
+# diagnostic suite (trend, dominant period, change points, residual whiteness).
+print(diagnostics.stationarity_report(y)["verdict"])
+
+# %%
 fig, axes = base.grid(4, ncols=2)
 timeseries.rolling_stats(y, window=30, ax=axes[0], title="Rolling mean & std (30d)")
 timeseries.acf(y, lags=40, ax=axes[1], title="ACF")
@@ -76,6 +81,13 @@ forecasters = {
         ),
         lags=14,
     ),
+    "ml_lgbm": make_forecaster(
+        "ml",
+        estimator=registry.make_model(
+            "lightgbm", task="regression", n_estimators=300, random_state=42, verbose=-1
+        ),
+        lags=14,
+    ),
 }
 preds = {}
 for name, fc in forecasters.items():
@@ -106,6 +118,17 @@ timeseries.forecast(
     upper=upper,
     ax=axes[0],
     title=f"28-day holdout — {best} (95% interval)",
+)
+
+# %%
+# Score the *band*, not just the point: pinball loss is the proper loss for a quantile, so the
+# 2.5%/97.5% bounds are graded as quantile forecasts (and coverage should sit near 95%).
+coverage = float(np.mean((test_y >= lower) & (test_y <= upper)))
+lower_pinball = evaluate.pinball_loss(test_y, lower, alpha=0.025)
+upper_pinball = evaluate.pinball_loss(test_y, upper, alpha=0.975)
+print(
+    f"interval coverage {coverage:.0%}   "
+    f"pinball: lower {lower_pinball:.1f}, upper {upper_pinball:.1f}"
 )
 
 # %% [markdown]

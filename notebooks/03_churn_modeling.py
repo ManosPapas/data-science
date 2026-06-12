@@ -147,11 +147,104 @@ fig, axes = base.grid(1, ncols=1)
 model.model_comparison(fold, ax=axes[0], title="Per-fold ROC-AUC by model")
 
 # %% [markdown]
+# ### Imbalance strategies — does reweighting the loss change anything?
+# `class_weight="balanced"` makes minority mistakes cost more. The ranking metric (ROC-AUC)
+# barely moves — reweighting shifts the *operating point*, which is exactly what default-threshold
+# F1 shows. (The resampling route — SMOTE via `imbalance.make_resampler` +
+# `imbalance.imbalanced_pipeline`, which resamples inside training folds only — is the next lever;
+# it changes the training prior, so recheck calibration before reading its outputs as
+# probabilities.)
+
+# %%
+weighted = Pipeline(
+    [
+        ("pre", preprocess.make_preprocessor(**pre)),
+        (
+            "clf",
+            registry.make_model(
+                "logistic", task="classification", max_iter=1000, class_weight="balanced"
+            ),
+        ),
+    ]
+)
+for name, pipe in {"plain": models["logistic"], "class_weight": weighted}.items():
+    auc = compare.fold_scores(pipe, x_train, y_train, cv=cv, scoring="roc_auc")
+    f1 = compare.fold_scores(pipe, x_train, y_train, cv=cv, scoring="f1")
+    print(f"{name:12s} ROC-AUC {auc.mean():.3f} ± {auc.std():.3f}   F1@0.5 {f1.mean():.3f}")
+
+# %% [markdown]
+# ### Hyper-parameter search + the validation curve
+# Randomized search samples the parameter space (cheaper than a grid at equal quality); the
+# validation curve shows *why* the chosen depth wins — past it, train keeps improving while
+# validation slips: overfitting's signature.
+
+# %%
+search = tune.random_search(
+    models["xgboost"],
+    {
+        "clf__max_depth": [2, 3, 4, 6],
+        "clf__learning_rate": [0.03, 0.1, 0.3],
+        "clf__n_estimators": [100, 200, 400],
+    },
+    x_train,
+    y_train,
+    n_iter=8,
+    cv=3,
+    scoring="roc_auc",
+    seed=42,
+)
+print(f"best CV ROC-AUC {search.best_score_:.3f} with {search.best_params_}")
+
+# %%
+depths, train_curve, val_curve = evaluate.validation_curve_scores(
+    models["xgboost"],
+    x_train,
+    y_train,
+    param_name="clf__max_depth",
+    param_range=[1, 2, 3, 4, 6, 8],
+    cv=3,
+    scoring="roc_auc",
+)
+fig, axes = base.grid(1, ncols=1)
+model.validation_curve(
+    depths, train_curve, val_curve, ax=axes[0], title="ROC-AUC vs tree depth (xgboost)"
+)
+
+# %% [markdown]
+# ### Ensembling the leaderboard
+# A soft-voting blend pays off when members are diverse *and* comparably strong — equal-weight
+# averaging with weaker members drags the blend below the best single model, which is exactly
+# what the fold scores adjudicate here. `ensemble.make_stacking` is the next step up: it *learns*
+# the blend weights on out-of-fold predictions instead of assuming them equal.
+
+# %%
+blend = ensemble.make_voting(
+    [
+        ("logistic", models["logistic"]),
+        ("xgboost", models["xgboost"]),
+        ("lgbm", models["lightgbm"]),
+    ],
+    voting="soft",
+)
+blend_auc = compare.fold_scores(blend, x_train, y_train, cv=cv, scoring="roc_auc")
+print(f"voting blend ROC-AUC {blend_auc.mean():.3f} ± {blend_auc.std():.3f}")
+print(f"best single  ROC-AUC {fold[ranked[0]].mean():.3f} ± {fold[ranked[0]].std():.3f}")
+
+# %% [markdown]
 # ## 4. Fit the winner, evaluate on held-out test
+# First an honest preview that spends no test data: out-of-fold predictions — every training row
+# scored by a fold-model that never saw it.
 
 # %%
 best_name = board["model"][0]
 best = models[best_name]
+oof_score = train.cross_val_predict(best, x_train, y_train, cv=cv, method="predict_proba")[:, 1]
+oof_auc = evaluate.classification_metrics(
+    y_train.to_numpy(), (oof_score >= 0.5).astype(int), y_score=oof_score
+)["roc_auc"]
+print(f"out-of-fold ROC-AUC on train: {oof_auc:.3f}  (the held-out test should land nearby)")
+
+# %%
 fitted = train.fit(best, x_train, y_train)
 y_score = train.predict_proba(fitted, x_test)[:, 1]
 y_pred = train.predict(fitted, x_test)
@@ -235,7 +328,15 @@ saved = persist.save_model(
 )
 print(f"saved -> {saved}   versions: {persist.model_versions('churn')}")
 
+# %%
+# The round trip a scoring job would do: load the newest version, batch-score fresh rows.
+reloaded = persist.load_model("churn")
+train.score_frame(reloaded, test_df.select(features).head(5)).select(
+    ["age", "tenure_months", "plan", "prediction"]
+)
+
 # %% [markdown]
-# **Takeaways:** a fair, leakage-free model comparison; the winner evaluated on held-out data with
-# the full curve suite; a profit-driven threshold; model-agnostic explanations; and a versioned,
-# reloadable artifact.
+# **Takeaways:** a fair, leakage-free model comparison (with imbalance handled two ways and the
+# blend checked against the best single model); a tuned depth justified by its validation curve;
+# an out-of-fold preview that matched the held-out test; a profit-driven threshold; model-agnostic
+# explanations; and a versioned artifact that reloads straight into batch scoring.

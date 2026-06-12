@@ -53,16 +53,27 @@ fig, axes = base.grid(2)
 eda.missingness_bar(raw, ax=axes[0], title="Missingness (%)")
 eda.count_bar(raw, "channel", ax=axes[1], title="Orders by channel")
 
+# %%
+# Before filling anything: is `unit_price` missing at random (MCAR), or does its absence depend on
+# other columns (MAR)? Large p-values everywhere = MCAR, so a simple median fill won't bias us;
+# small ones would call for conditional imputation (see notebook 07 and `preprocess.make_imputer`).
+stats.missingness_dependence(
+    raw.select(["unit_price", "units", "discount", "revenue", "segment", "region", "channel"]),
+    "unit_price",
+)
+
 # %% [markdown]
 # ## 3. Clean
-# Standardize names → normalize the messy `segment` text → fill gaps → fix dtypes →
-# drop duplicate orders → winsorize outliers → downcast for memory.
+# Standardize names → normalize the messy `segment` text → flag what was missing (the gap itself
+# can be signal) → fill gaps → fix dtypes → drop duplicate orders → winsorize outliers → downcast
+# for memory.
 
 # %%
-# Text: " Retail", "RETAIL", "retail " all collapse to "retail"; fill the missing ones.
+# Text: " Retail", "RETAIL", "retail " all collapse to "retail"; flag gaps, then fill them.
 clean_tx = (
     raw.pipe(clean.standardize_columns)
     .pipe(clean.clean_text, ["segment"], lower=True)
+    .pipe(clean.add_missing_indicators, ["unit_price", "discount"])
     .pipe(clean.fill_missing, strategy="constant", value="unknown", columns=["segment"])
     .pipe(clean.fill_missing, strategy="median", columns=["unit_price", "discount"])
 )
@@ -96,6 +107,15 @@ print("revenue AFTER  winsorizing:", stats.describe_distribution(winsorized["rev
 print(memory_report(winsorized))
 compact = clean.downcast(winsorized)
 print("\n" + memory_report(compact))
+
+# %%
+# Model-ready categoricals without one-hot explosion: frequency-encode `segment` (count as a
+# numeric feature) and lump the thinnest `channel` into "other" (rare levels carry too few rows
+# to estimate anything). Target encoding lives in `preprocess.make_encoder` (fit on train only).
+encoded = compact.pipe(transform.frequency_encode, ["segment"]).pipe(
+    transform.group_rare, "channel", min_share=0.15
+)
+encoded.group_by("channel").agg(pl.len()).sort("len", descending=True)
 
 # %% [markdown]
 # ## 4. Validate — fail fast if the contract is broken
@@ -148,14 +168,20 @@ sample_df = transform.sample(compact, n=800, seed=42)
 eda.pairplot(sample_df, ["revenue", "unit_price", "units", "discount"], hue="segment")
 
 # %% [markdown]
-# ## 7. The correlation heatmap, interactively (Plotly)
-# Rendered with Plotly instead of matplotlib — hover for exact values, zoom, pan. (Needs the
-# `interactive` extra — `pip install plotly`.)
+# ## 7. Correlations — Pearson, Spearman, and an interactive heatmap
+# Pearson measures *linear* association and bends to outliers; Spearman ranks first, so it reads
+# monotonic relationships robustly. Where the two disagree, look at the scatter.
 
 # %%
-interactive.correlation_heatmap(compact, title="Numeric correlations")
+stats.spearman(compact.select(["revenue", "units", "unit_price", "discount"]))
+
+# %%
+# The Plotly version — hover for exact values, zoom, pan. (Needs the `interactive` extra.)
+interactive.correlation_heatmap(compact, title="Numeric correlations (Pearson)")
 
 # %% [markdown]
-# **Takeaways:** types fixed and memory cut via downcast; `segment` cleaned + imputed; duplicate
-# orders and revenue outliers handled; revenue is log-normal-ish and varies by segment. The clean
-# frame is cached to `data/processed/` for the feature/KPI notebook.
+# **Takeaways:** types fixed and memory cut via downcast; `segment` cleaned + imputed (after a
+# missingness-mechanism check said simple fills are safe, with `_missing` flags keeping the
+# signal); duplicate orders and revenue outliers handled; rare channels lumped and frequencies
+# encoded for modeling; revenue is log-normal-ish and varies by segment. The clean frame is
+# cached to `data/processed/` for the feature/KPI notebook.

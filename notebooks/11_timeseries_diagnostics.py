@@ -32,6 +32,13 @@ y = daily["revenue"].to_numpy()
 # order in notebook 05 encodes.
 
 # %%
+# Eyes first: a drifting rolling mean is non-stationarity you can see, and the lag plot's tight
+# diagonal says adjacent days are strongly dependent (memory the tests then quantify).
+fig, axes = base.grid(2)
+timeseries.rolling_stats(y, window=30, ax=axes[0], title="Rolling mean & std (30d)")
+timeseries.lag_plot(y, lag=7, ax=axes[1], title="Lag-7 dependence")
+
+# %%
 print("raw series :", diagnostics.stationarity_report(y))
 print("differenced:", diagnostics.stationarity_report(np.diff(y)))
 
@@ -107,7 +114,32 @@ timeseries.forecast_residuals(
 )
 
 # %% [markdown]
+# ## 6. The payoff — diagnostics chosen, backtest won
+# Everything above said: difference once, weekly seasonality, upward drift. A model built to that
+# spec (additive-seasonal ETS, period 7) against the naive baseline, judged the honest way — a
+# rolling-origin backtest over the final months.
+
+# %%
+spec = {
+    "naive": lambda: make_forecaster("naive"),
+    "ets_weekly": lambda: make_forecaster("ets", trend="add", seasonal="add", seasonal_periods=7),
+}
+rows = []
+for name, make in spec.items():
+    bt = backtest.rolling_origin(make, y, initial=y.size - 120, horizon=14, step=30)
+    rows.append(
+        {
+            "model": name,
+            "mae": round(backtest.mae(bt["actual"], bt["pred"]), 1),
+            "rmse": round(backtest.rmse(bt["actual"], bt["pred"]), 1),
+            "smape": round(backtest.smape(bt["actual"], bt["pred"]), 2),
+        }
+    )
+pl.DataFrame(rows)
+
+# %% [markdown]
 # **Takeaways:** the series is difference-stationary with a ~+3/week trend and a 7-day cycle —
 # which fixes the model family (d=1, weekly seasonal term) before any fitting; the break detector
-# pinpoints injected level shifts to the day (run it on differenced/detrended data); and Ljung-Box
-# certifies the seasonal ETS leaves nothing forecastable behind, while the naive model does.
+# pinpoints injected level shifts to the day (run it on differenced/detrended data); Ljung-Box
+# certifies the seasonal ETS leaves nothing forecastable behind, while the naive model does; and
+# the rolling-origin backtest confirms the diagnosed spec beats the baseline where it counts.

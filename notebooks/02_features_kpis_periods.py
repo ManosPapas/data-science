@@ -98,6 +98,47 @@ print(f"repeat rate: {repeat:.1%}   NPS (from satisfaction): {nps_value:.0f}")
 # %%
 behaviour.funnel([10000, 6200, 3100, 1850], ["visits", "carts", "checkout", "purchase"])
 
+# %%
+# Stage-by-stage rates from the same funnel numbers — where exactly do we leak?
+print(f"add-to-cart  {behaviour.add_to_cart_rate(6200, 10000):.0%}")
+print(f"checkout     {behaviour.checkout_rate(3100, 6200):.0%}")
+print(f"abandonment  {behaviour.cart_abandonment_rate(1850, 3100):.0%} of checkouts never purchase")
+
+# %% [markdown]
+# ### Cohort retention — when do customers go quiet?
+# Group customers by *first-order* month, track the share ordering again k months later, and read
+# the heatmap row by row. Survivorship guard: every customer who ever ordered stays in their
+# cohort's denominator forever — dropping the quiet ones would flatter every number.
+
+# %%
+first_order = tx.group_by("customer_id").agg(
+    pl.col("order_date").min().dt.truncate("1mo").alias("cohort")
+)
+cohort_sizes = first_order.group_by("cohort").agg(pl.len().alias("size"))
+activity = (
+    tx.join(first_order, on="customer_id")
+    .with_columns(
+        (
+            (pl.col("order_date").dt.year() - pl.col("cohort").dt.year()) * 12
+            + (pl.col("order_date").dt.month() - pl.col("cohort").dt.month())
+        ).alias("months_since")
+    )
+    .filter(pl.col("months_since") <= 6)
+    .group_by("cohort", "months_since")
+    .agg(pl.col("customer_id").n_unique().alias("active"))
+)
+retention = (
+    activity.join(cohort_sizes, on="cohort")
+    .with_columns((pl.col("active") / pl.col("size")).alias("retention"))
+    .pivot("months_since", index="cohort", values="retention")
+    .sort("cohort")
+    .head(9)
+    .with_columns(cs.numeric().fill_null(0.0))  # a missing cell means nobody ordered: 0%
+    .with_columns(pl.col("cohort").dt.strftime("%Y-%m"))
+)
+fig, axes = base.grid(1, ncols=1)
+timeseries.cohort_heatmap(retention, index="cohort", ax=axes[0], title="Repeat-order retention")
+
 # %% [markdown]
 # ## 4. Time-period slicing & comparison
 # Default rolling windows, then period-over-period comparisons (the bread and butter of reporting).
@@ -122,6 +163,19 @@ pl.DataFrame(
 # %%
 # Quarter-over-quarter revenue per region in one shot.
 period.compare_periods_by(tx, "order_date", "revenue", "region", period="quarter")
+
+# %%
+# Any two explicit windows compare the same way — e.g. this Q2 vs Q1 (campaign vs baseline).
+from datetime import date
+
+period.compare_windows(
+    tx,
+    "order_date",
+    "revenue",
+    (date(2024, 4, 1), date(2024, 6, 30)),
+    (date(2024, 1, 1), date(2024, 3, 31)),
+    labels=("Q2-24", "Q1-24"),
+)
 
 # %% [markdown]
 # ## 5. Group analysis
@@ -148,5 +202,6 @@ eda.boxplot_by(tx, "revenue", "quarter", ax=axes[1], title="Revenue by quarter")
 
 # %% [markdown]
 # **Takeaways:** calendar + share + bin features and a clean customer join; a compact financial &
-# behaviour KPI set; and MoM/QoQ/YoY plus per-region QoQ for reporting. Group tests quantify whether
-# segment differences are real.
+# behaviour KPI set with the funnel's leak points; cohort retention that keeps quiet customers in
+# the denominator (no survivorship flattery); and MoM/QoQ/YoY, explicit-window, and per-region QoQ
+# comparisons for reporting. Group tests quantify whether segment differences are real.
