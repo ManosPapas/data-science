@@ -164,6 +164,15 @@ print(communities.group_by("component").agg(pl.col("node").sort()))
 hubs = graph.degree_centrality(edges, weight="weight")
 print(f"hub product: {hubs['node'][0]} (degree {hubs['degree'][0]:.0f})")
 
+# %%
+# The same structure, drawn: hubs central, the two communities visibly apart.
+network.network(
+    edges,
+    weight="weight",
+    seed=42,
+    title="The co-purchase network — two product worlds, bridged by accessories",
+)
+
 # %% [markdown]
 # **Takeaways:** lift, not confidence, is the cross-sell signal — the gift card reaches ~30% of
 # baskets and still predicts nothing (lift ≈ 1), while grinder→beans is a genuine affinity; the

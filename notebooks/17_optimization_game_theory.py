@@ -140,7 +140,14 @@ configs = pl.DataFrame(
 on_front = optimize.pareto_front(configs.select("margin", "volume").to_numpy(), maximize=True)
 frontier = configs.with_columns(pl.Series("efficient", on_front))
 print(frontier.sort("efficient", descending=True))
-interactive.scatter(frontier, "margin", "volume", color="efficient", title="The efficient frontier")
+decision.pareto_frontier(
+    frontier,
+    x="margin",
+    y="volume",
+    efficient="efficient",
+    label="config",
+    title="The efficient frontier",
+)
 
 # %% [markdown]
 # ## 6. Optimizing under uncertainty — mean vs worst case

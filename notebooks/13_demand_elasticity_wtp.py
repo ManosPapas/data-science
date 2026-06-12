@@ -92,11 +92,11 @@ history = pl.DataFrame({"week": np.arange(weeks), "price": p_t, "quantity": q_t}
 rolling = pricing.elasticity.rolling_elasticity(
     history, price="price", quantity="quantity", time="week", window=60
 )
-interactive.line(
-    rolling.unpivot(on=["elasticity", "ci_low", "ci_high"], index="week"),
-    "week",
-    "value",
-    color="variable",
+decision.fan(
+    rolling,
+    x="week",
+    bands=[("ci_low", "ci_high")],
+    line="elasticity",
     title="Rolling 60-week elasticity — the regime change is visible",
 )
 
@@ -203,11 +203,9 @@ print(f"optimal price point €{survey.optimal_price:.0f}  (survey)")
 print(f"transaction-based median WTP €{logit.wtp_median:.0f}  -> the two roughly agree")
 
 # %%
-interactive.line(
-    survey.curves.unpivot(on=["too_cheap", "cheap", "expensive", "too_expensive"], index="price"),
-    "price",
-    "value",
-    color="variable",
+decision.van_westendorp(
+    survey.curves,
+    points={"lower": low, "optimal": survey.optimal_price, "upper": high},
     title="Van Westendorp price sensitivity meter",
 )
 

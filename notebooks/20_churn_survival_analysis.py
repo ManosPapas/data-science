@@ -62,13 +62,7 @@ median_life = survival.median_survival(customers["tenure"], customers["churned"]
 print(f"naive mean tenure of churned customers: {naive_mean_tenure:.1f} months")
 print(f"KM median customer lifetime:            {median_life:.1f} months")
 
-interactive.line(
-    km.unpivot(on=["survival", "ci_low", "ci_high"], index="time"),
-    "time",
-    "value",
-    color="variable",
-    title="Kaplan-Meier survival curve with 95% CI",
-)
+timeseries.survival_curve(km, title="Kaplan-Meier survival curve with 95% CI")
 
 # %% [markdown]
 # ## 3. Retention curves by segment
@@ -77,17 +71,12 @@ interactive.line(
 # the annual plan launched later (its customers have shorter observation windows).
 
 # %%
-curves_by_plan = []
+curves_by_plan = {}
 for label, segment in [("monthly", 0.0), ("annual", 1.0)]:
     part = customers.filter(pl.col("annual_plan") == segment)
-    seg_curve = survival.kaplan_meier(part["tenure"], part["churned"])
-    curves_by_plan.append(seg_curve.with_columns(pl.lit(label).alias("plan")))
-interactive.line(
-    pl.concat(curves_by_plan),
-    "time",
-    "survival",
-    color="plan",
-    title="Retention by plan — annual contracts survive longer at every tenure",
+    curves_by_plan[label] = survival.kaplan_meier(part["tenure"], part["churned"])
+timeseries.survival_curve(
+    curves_by_plan, title="Retention by plan — annual contracts survive longer at every tenure"
 )
 
 # %%

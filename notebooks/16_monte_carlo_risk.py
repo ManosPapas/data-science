@@ -53,7 +53,11 @@ case.summary(targets=[0.0, 100_000.0])
 # %%
 print(f"P10 €{case.p10:,.0f}   P50 €{case.p50:,.0f}   P90 €{case.p90:,.0f}")
 print(f"P(loss) = {case.prob_below(0.0):.1%}, P(≥ €100k target) = {case.prob_above(100_000):.1%}")
-eda.histogram(case.samples, bins=60, title="Contribution distribution — the whole answer")
+decision.outcome_distribution(
+    case.samples,
+    targets=[0.0, 100_000.0],
+    title="Contribution distribution — the whole answer",
+)
 
 # %% [markdown]
 # ## 2. What drives the spread — the simulation-native tornado
@@ -67,10 +71,15 @@ case.drivers()
 
 # %%
 base_case = {"volume": 50_000.0, "price": 12.0, "unit_cost": 7.0, "fixed": 150_000.0}
-scenario.sensitivity(
+two_point = scenario.sensitivity(
     contribution,
     base_case,
     {"volume": (35_000.0, 65_000.0), "unit_cost": (6.0, 9.0), "price": (11.0, 13.0)},
+)
+decision.tornado(
+    two_point,
+    base=contribution(**base_case),
+    title="Two-point tornado — same levers, drawn around the base case",
 )
 
 # %% [markdown]
@@ -98,12 +107,12 @@ simulate.stress_test(
 
 # %%
 paths = simulate.simulate_paths(start=1_000_000.0, drift=0.01, volatility=0.06, periods=36, n=1000)
-fan = simulate.path_percentiles(paths, quantiles=(0.1, 0.5, 0.9))
-interactive.line(
-    fan.unpivot(on=["p10", "p50", "p90"], index="period"),
-    "period",
-    "value",
-    color="variable",
+fan_bands = simulate.path_percentiles(paths, quantiles=(0.1, 0.5, 0.9))
+decision.fan(
+    fan_bands,
+    x="period",
+    bands=[("p10", "p90")],
+    line="p50",
     title="36-month revenue fan — uncertainty compounds",
 )
 
@@ -156,12 +165,8 @@ first_alert = chart.filter(pl.col("alert"))
 shewhart_breaches = ((live < limits.lower) | (live > limits.upper)).sum()
 print(f"individual points outside the 3-sigma band: {shewhart_breaches}")
 print(f"first EWMA alert at t={first_alert['t'][0] if first_alert.height else None}")
-interactive.line(
-    chart.unpivot(on=["ewma", "lower", "upper"], index="t"),
-    "t",
-    "value",
-    color="variable",
-    title="EWMA control chart — the slow drift is caught, single points never alarm",
+decision.control_chart(
+    chart, title="EWMA control chart — the slow drift is caught, single points never alarm"
 )
 
 # %% [markdown]

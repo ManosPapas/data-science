@@ -70,11 +70,10 @@ print(f"point elasticity of revenue curve: {local_e[10]:.2f} (= 1 + e = {1 + e:.
 frame = pl.DataFrame(
     {"price": grid, "revenue": revenue_curve, "profit": profit_curve, "mr": marginal_from_curve}
 )
-interactive.line(
-    frame.unpivot(on=["revenue", "profit"], index="price"),
-    "price",
-    "value",
-    color="variable",
+decision.price_curves(
+    frame,
+    curves=("revenue", "profit"),
+    optimum=grid_price,
     title="Revenue vs profit — elastic demand wants different prices for each",
 )
 
