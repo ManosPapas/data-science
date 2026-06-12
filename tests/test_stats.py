@@ -42,6 +42,65 @@ def test_best_distribution_prefers_the_true_family(rng: np.random.Generator) -> 
     assert ranked["dist"][0] == "expon"  # lower AIC first
 
 
+def test_bayes_rule_respects_the_base_rate() -> None:
+    posterior = stats.bayes_rule(0.01, 0.99, 0.05)
+    assert abs(posterior - 0.1667) < 0.01  # 99%-sensitive test, 1% prior -> only ~17%
+
+
+def test_proportion_confidence_interval_brackets_the_rate() -> None:
+    rate, lower, upper = stats.proportion_confidence_interval(30, 1000)
+    assert lower < rate < upper
+    assert lower > 0.0 and upper < 1.0
+
+
+def test_bootstrap_ci_brackets_mean_and_median(rng: np.random.Generator) -> None:
+    data = rng.normal(50.0, 5.0, 400)
+    estimate, lower, upper = stats.bootstrap_ci(data, np.mean, n_resamples=500, seed=0)
+    assert lower < estimate < upper
+    assert lower < 50.0 < upper
+    estimate, lower, upper = stats.bootstrap_ci(data, np.median, n_resamples=500, seed=0)
+    assert lower < estimate < upper
+
+
+def test_permutation_test_detects_shift_and_stays_calm(rng: np.random.Generator) -> None:
+    a = rng.normal(0.0, 1.0, 60)
+    shifted = stats.permutation_test(a, rng.normal(1.0, 1.0, 60), n_resamples=2000, seed=0)
+    null = stats.permutation_test(a, rng.normal(0.0, 1.0, 60), n_resamples=2000, seed=0)
+    assert shifted.p_value < 0.01
+    assert null.p_value > 0.05
+
+
+def test_simpsons_check_flags_a_reversal(rng: np.random.Generator) -> None:
+    # within each group y falls with x, but the high-x group sits at a higher level
+    x_a = rng.uniform(0.0, 1.0, 200)
+    x_b = rng.uniform(2.0, 3.0, 200)
+    y_a = -1.0 * x_a + rng.normal(0.0, 0.05, 200)
+    y_b = -1.0 * x_b + 5.0 + rng.normal(0.0, 0.05, 200)
+    df = pl.DataFrame(
+        {
+            "x": np.concatenate([x_a, x_b]),
+            "y": np.concatenate([y_a, y_b]),
+            "g": ["a"] * 200 + ["b"] * 200,
+        }
+    )
+    out = stats.simpsons_check(df, x="x", y="y", group="g")
+    assert out["reversal"] is True
+    assert out["overall_slope"] > 0 > out["within_slope"]
+    assert out["by_group"].height == 2
+
+
+def test_entropy_and_information_gain() -> None:
+    assert abs(stats.entropy(["a", "b", "a", "b"]) - 1.0) < 1e-9  # fair coin = 1 bit
+    assert stats.entropy(["a", "a", "a"]) == 0.0
+    df = pl.DataFrame({"f": ["x", "x", "y", "y"], "t": ["p", "p", "n", "n"]})
+    assert abs(stats.information_gain(df, "f", "t") - 1.0) < 1e-9  # perfect predictor
+
+
+def test_kl_divergence_zero_iff_identical() -> None:
+    assert stats.kl_divergence([0.5, 0.5], [0.5, 0.5]) == 0.0
+    assert stats.kl_divergence([0.9, 0.1], [0.5, 0.5]) > 0.0
+
+
 def test_missingness_dependence_separates_mar_from_mcar(rng: np.random.Generator) -> None:
     df = pl.DataFrame(
         {

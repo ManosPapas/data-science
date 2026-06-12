@@ -110,3 +110,18 @@ def test_dominant_period_finds_the_cycle(rng: np.random.Generator) -> None:
     t = np.arange(240)
     y = 10.0 * np.sin(2 * np.pi * t / 12) + 0.3 * t + rng.normal(0.0, 1.0, t.size)
     assert diagnostics.dominant_period(y) == 12
+
+
+def test_trend_test_detects_drift_and_stays_calm(rng: np.random.Generator) -> None:
+    t = np.arange(200)
+    trending = diagnostics.trend_test(0.05 * t + rng.normal(0.0, 1.0, 200))
+    assert trending["trend"] == "increasing"
+    assert abs(float(trending["slope"]) - 0.05) < 0.02  # Sen's slope ~ true rate
+    assert diagnostics.trend_test(rng.normal(0.0, 1.0, 200))["trend"] == "none"
+
+
+def test_change_points_finds_the_break(rng: np.random.Generator) -> None:
+    series = np.concatenate([rng.normal(0.0, 0.5, 100), rng.normal(3.0, 0.5, 100)])
+    points = diagnostics.change_points(series, min_size=20)
+    assert any(abs(p - 100) <= 5 for p in points)
+    assert diagnostics.change_points(rng.normal(0.0, 0.5, 200), min_size=20) == []

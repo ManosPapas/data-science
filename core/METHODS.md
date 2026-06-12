@@ -12,7 +12,13 @@ House conventions:
   `viz` charts only draw what those return.
 - **Hypothesis tests** return a `TestResult(statistic, p_value)`. The p-value is
   P(data at least this extreme | H0 true) — it is *not* P(H0). Significance defaults to
-  `alpha = 0.05`; a 95% CI excluding 0 and p < 0.05 tell the same story.
+  `alpha = 0.05`; a 95% CI excluding 0 and p < 0.05 tell the same story. `alpha` *is* your
+  Type I (false-positive) rate; power = 1 − β is the chance of catching a real effect, so
+  Type II (missing it) is what `stats.sample_size_*` keeps low at design time.
+- **Why n matters twice**: the law of large numbers says sample averages converge on the truth;
+  the CLT says their error becomes approximately normal at a √n rate — that is what licenses
+  t-tests and `mean_confidence_interval`, and what `bootstrap_ci` reproduces by simulation when
+  no formula exists.
 - **Fit on train only.** Anything stateful (imputers, scalers, encoders, models) fits on the
   training split and transforms the rest — that is what `modeling.preprocess` pipelines enforce.
 - Randomized routines take `seed` (default 42) so results are reproducible.
@@ -33,6 +39,7 @@ House conventions:
 | `correlation(df)` / `spearman(df)` | Linear vs monotonic association scan | Pearson r (linear, outlier-sensitive) vs Spearman rank ρ (monotonic, robust); both in [-1, 1], neither implies causation |
 | `correlation_test(a, b, method=)` | One pair, with evidence | r (or ρ) plus a p-value for H0: no association |
 | `mutual_information(df, target, task=)` | Non-linear feature relevance | MI ≥ 0 in nats between each numeric feature and the target; catches dependence correlation misses (task = `regression`/`classification`) |
+| `simpsons_check(df, x=, y=, group=)` | A headline trend smells like composition | Simpson's-paradox detector: pooled slope vs per-group slopes; `reversal=True` = the aggregate association flips within groups. Which margin to report is causal: condition on a confounder, not on a mediator |
 | `pct_change(current, previous)` | Quick relative change | (cur − prev)/prev, `None` on zero base |
 
 ### Distribution fitting & outliers
@@ -54,6 +61,7 @@ House conventions:
 | `kruskal(*groups)` | 3+ groups, assumptions broken | Rank-based ANOVA analogue |
 | `chi_square(a, b)` | Two categorical variables | Test of independence on the contingency table; expected counts ≥ 5 per cell to be trustworthy |
 | `proportions_test(successes, totals)` | Two conversion rates | Two-proportion z-test (the classical A/B significance test) |
+| `permutation_test(a, b)` | Small n / ugly distributions, but you want to compare *means* | Shuffles group labels to build the exact null of mean(a) − mean(b) — assumption-free significance (`mann_whitney` tests ranks, a different question) |
 | `compare_groups(df, value, group)` | One-call group comparison | Auto-picks the right test (checks normality; 2 levels → Welch/Mann-Whitney, 3+ → ANOVA/Kruskal) and reports effect size with the p-value |
 | `group_summary(df, value, group)` | Table for the deck | Per-group n, mean, std, and 95% CI half-width (±1.96·SE) |
 
@@ -71,13 +79,43 @@ House conventions:
 | Function | Use when | What it tells you |
 |---|---|---|
 | `mean_confidence_interval(x, confidence=)` | Uncertainty on one mean | t-distribution CI; "95%" = the long-run coverage of the *procedure*. Width shrinks with √n (CLT) |
+| `proportion_confidence_interval(s, n)` | Error bar on a rate | Wilson score interval: stays inside [0, 1] and behaves at small n / extreme rates, where the Wald p ± z·SE interval collapses or spills out |
+| `bootstrap_ci(x, statistic=)` | CI for a median / ratio / quantile — no clean formula | Resamples with replacement and reads the CI off the empirical distribution ('BCa' corrects bias and skew) — the CLT by simulation, for any statistic |
+| `bayes_rule(prior, tpr, fpr)` | Updating a base rate with a test / alert signal | Posterior P(H \| signal). The base-rate-neglect guard: a 99%-sensitive, 5%-false-positive test on a 1% prior gives only ~17% |
 | `sample_size_mean(effect_size, power=, alpha=)` | Planning a means experiment | Per-arm n to detect a given Cohen's d at the target power (default 80%) and alpha. Run *before* the experiment — peeking instead is what `experiment.msprt_means` is for |
 | `sample_size_proportion(p1, p2, ...)` | Planning a conversion experiment | Per-arm n to detect p1 → p2 |
 | `power(effect_size, n, alpha=)` | Sanity-check an existing design | P(detect the effect if it is real) = 1 − β; an underpowered test mostly produces false "inconclusive"s and exaggerated significant effects |
 
+### Information theory
+
+| Function | Use when | What it tells you |
+|---|---|---|
+| `entropy(labels)` | How unpredictable is a categorical? | Shannon entropy in bits: 0 = constant, log2(k) = uniform over k — the currency that information gain, MI, and tree splits trade in |
+| `kl_divergence(p, q)` | How far is distribution Q from P? | Extra bits paid modelling P with Q; asymmetric, 0 iff identical. Relatives: `monitor.psi` is a symmetrized binned KL; classifier cross-entropy (`log_loss`) = H(P) + KL(P‖Q) |
+| `information_gain(df, feature, target)` | Which categorical feature splits the target best? | H(target) − expected conditional entropy — exactly what entropy-based decision trees maximize per split; the categorical sibling of `mutual_information` |
+
 ---
 
-## analytics.regression — OLS assumption diagnostics
+## analytics.regression — regression for *inference* (fits + assumption checks)
+
+`modeling` predicts; this module explains. Fitters return a `FitSummary`: a coefficient table
+(term, coef, std_err, statistic, p_value, ci_low/ci_high) plus model stats (R², AIC, n).
+
+### Fitting
+
+| Function | Use when | What it tells you |
+|---|---|---|
+| `ols_fit(df, y=, x=)` | Read effect sizes off a continuous outcome | Each coef = expected Δy per unit of that feature, others held fixed, with SE/t/p/CI. Run `linear_assumptions` on the residuals before quoting the p-values; add `transform.add_interactions` columns to test moderation |
+| `glm_fit(df, y=, x=, family=)` | y isn't normal: counts, 0/1, skewed amounts | The right likelihood + link: 'poisson' (log link — exp(coef) is a rate multiplier), 'binomial' (logit — coefs are log-odds), 'gamma' (log link, positive skew), 'gaussian' (= OLS). Wald z inference; compare specs by AIC |
+| `fixed_effects(df, y=, x=, entity=)` | Panel data; entities differ in level (stores, customers) | Within-entity demeaning absorbs *every* time-invariant entity confounder — slopes come from within-entity variation only. Dof-corrected SEs; `r_squared` is the within-R²; entity-constant features drop out |
+| `mixed_effects(df, y=, x=, group=)` | Group structure; groups should share strength | Random-intercept model (partial pooling): small groups borrow from the rest — the regression cousin of `bayes.hierarchical_rates`. `group_variance` = between-group intercept variance; Wald z inference, wants ≳ 8-10 groups |
+
+Fixed vs random/mixed: fixed effects assume nothing about the entities and kill all level
+confounding, but can't estimate entity-constant features; mixed models assume intercepts ~ normal
+and buy efficiency, shrinkage, and group-level inference. Confounding worry → fixed; many small
+groups → mixed.
+
+### Assumption diagnostics
 
 Predictions survive mild violations; *inference* (coefficients, CIs, p-values) does not.
 
@@ -109,6 +147,24 @@ Design checklist (PDF §7/§9): randomize units, define the primary metric up fr
 
 ---
 
+## analytics.bayes — Bayesian building blocks
+
+The grammar everywhere in this repo's `bayes_*` tooling: **prior** (belief before data) ×
+**likelihood** (how probable the data are under each parameter value) → **posterior** (belief
+after). Conjugate pairs make the update closed-form; MCMC samples it when nothing is closed-form.
+
+| Function | Use when | What it tells you |
+|---|---|---|
+| `beta_posterior(successes, trials, prior=)` | One rate, with honest uncertainty | Conjugate Beta-Binomial update: Beta(a, b) + s/n → Beta(a+s, b+n−s). The interval is *credible* — "the rate is in here with 95% probability". The prior is explicit: Beta(1, 1) = uniform; larger a+b = stronger belief (mean a/(a+b)) for thin data |
+| `hierarchical_rates(successes, trials, labels=)` | Many small rates (per store / SKU / campaign) | Hierarchical model via empirical Bayes: fits one shared Beta prior, then partially pools — small-n groups shrink hard toward the global mean, big-n barely move. Rank league tables on `shrunk_rate`, not raw rates |
+| `mcmc_sample(log_density, start, step=)` | No conjugate form for your posterior | Random-walk Metropolis: feed any log-density (log-prior + log-likelihood), get posterior draws + acceptance rate. Summarize with means / `np.quantile` credible intervals; tune `step` to ~20-40% acceptance, eyeball the trace. For big models use a dedicated PPL |
+
+Likelihood itself: `stats.fit_distribution` is the maximum-likelihood half of the machinery; the
+A/B decision wrappers are `experiment.bayes_conversions` / `bayes_means`; the bandit that *acts*
+on posteriors is `ThompsonSampling`.
+
+---
+
 ## analytics.causal — effects without (or beyond) randomization
 
 Correlation ≠ causation: confounders and reverse causality. Each tool buys identification with a
@@ -123,7 +179,11 @@ different assumption — pick the one you can defend.
 | `ipw_ate(outcome, treatment, propensity)` | Keep all rows instead of matching | Inverse-propensity weighting (normalized/Hájek, scores clipped to [0.01, 0.99]): reweights groups to the same covariate mix. Sensitive to propensity misspecification |
 | `itt_tot(assigned, treated, outcome)` | Experiment with non-compliance | `itt` = effect of *assignment* (what shipping delivers), `compliance` = uptake moved, `tot` = itt/compliance — Wald/IV estimate on compliers (LATE) |
 | `iv_effect(outcome, treatment, instrument)` | Treatment self-selected, instrument available | cov(z,y)/cov(z,t) = 2SLS with one instrument. Needs relevance (z moves t — raises if ~0) and the *untestable* exclusion restriction (z affects y only through t) |
+| `regression_discontinuity(running, outcome, cutoff=, bandwidth=)` | A threshold rule assigns treatment (score cutoffs, spend tiers, exam marks) | Sharp RDD: the fitted jump at the cutoff is the *local* causal effect — units just either side are comparable. Vary `bandwidth` to check stability; invalid if units manipulate the running variable (bunching) |
+| `synthetic_control(treated_pre, donors_pre, treated_post, donors_post)` | One treated unit (market, region), no natural control | Non-negative sum-to-one donor weights fitted to track the pre-period; the post-period gap to that synthetic twin is the effect — an explicit counterfactual. Demand a small `pre_rmse`; placebo-test by rerunning on donors |
 | `subgroup_effects(df, outcome=, treatment=, segment=)` | Who benefits most? (HTE) | Per-segment uplift + Welch p. Many slices = multiplied false positives — treat surprising subgroups as hypotheses to re-test |
+| `TLearner(model).fit(x, treatment, outcome)` | Target *persuadables*, not likely converters | Uplift model: one outcome model per arm, predicted uplift = the difference. Rank customers by it for campaign targeting — incrementality beats propensity (sure things convert anyway) |
+| `qini_points` / `qini_auc(outcome, treatment, scores)` | Evaluate an uplift *ranking* | Qini curve = incremental successes vs share targeted; the area over the random-targeting line is the uplift world's AUC. Accuracy/AUC on outcomes say nothing about persuasion |
 
 ---
 
@@ -168,9 +228,10 @@ Statistical map of the menu:
 - **Linear family** — `linear`, `logistic` (linear in log-odds; log-loss not MSE), `ridge` (L2:
   shrinks coefficients smoothly, treats multicollinearity), `lasso` (L1: zeroes coefficients =
   embedded feature selection), `elasticnet` (L1+L2: sparsity with correlated-group stability),
-  `huber`/`quantile` (robust / conditional-quantile loss), `poisson` (counts),
-  `bayesian_ridge` (posterior over coefficients). Regularization is the lever on the
-  bias-variance trade-off: penalty up → variance down, bias up.
+  `huber`/`quantile` (robust / conditional-quantile loss), `poisson`/`gamma`/`tweedie` (GLM
+  losses for counts / positive skew / zero-inflated continuous — inference twins in
+  `regression.glm_fit`), `bayesian_ridge` (posterior over coefficients). Regularization is the
+  lever on the bias-variance trade-off: penalty up → variance down, bias up.
 - **Margin / distance / probabilistic** — `svc`/`svr` (kernel margins), `knn` (local averaging —
   scale features; suffers the curse of dimensionality first), `gaussian_nb`/`bernoulli_nb`
   (Bayes' rule with conditional independence).
@@ -317,6 +378,17 @@ Explore-exploit alternatives to a fixed A/B: keep choosing, keep learning. All e
 
 ---
 
+## decision.scenario — valuing decisions under uncertainty
+
+| Function | Use when | What it tells you |
+|---|---|---|
+| `expected_utility(outcomes, probs, risk_aversion=)` | Comparing gambles when risk appetite matters | Probability-weighted CARA utility: `risk_aversion=0` is plain expected value; a > 0 makes downside hurt more than equal upside helps, so volatile options score below their mean |
+| `certainty_equivalent(outcomes, probs, risk_aversion=)` | Price a gamble in money | u⁻¹(EU): the sure amount worth exactly the gamble. EV − CE = the risk premium (what insurance or a guaranteed contract is rationally worth) |
+| `scenario_table(value_fn, base, scenarios)` | Stress a decision under coherent futures | Re-values `value_fn(**inputs)` per named scenario (downturn, optimistic, ...) with `vs_base` swings — scenario analysis; inputs move *together* |
+| `sensitivity(value_fn, base, ranges)` | Which assumption actually drives the answer? | One-at-a-time low→high swings ranked by absolute swing (tornado-ready): refine the biggest lever first. Misses input interactions by design — probe those with scenarios |
+
+---
+
 ## forecasting — models, diagnostics, backtesting
 
 ### forecasting.diagnostics — check the series first
@@ -328,6 +400,8 @@ Explore-exploit alternatives to a fixed A/B: keep choosing, keep learning. All e
 | `stationarity_report(y)` | One verdict | ADF + KPSS grid: both agree stationary → model it; both non-stationary → difference; ADF-only → difference-stationary (difference); KPSS-only → trend-stationary (detrend). Differencing a trend-stationary series (or vice versa) leaves the problem in place |
 | `ljung_box(residuals, lags=)` | After fitting | H0: residuals are white noise up to `lags`. Small p = structure missed → raise AR/MA order, add the seasonal term or features. Set lags ≥ one season |
 | `dominant_period(y)` | What's the seasonality? | Periodogram peak (linearly detrended) → cycle length, e.g. 7 on daily data. Confirm visually (`viz.timeseries.acf` / `seasonal_subseries`) before wiring into a model |
+| `trend_test(y)` | Is the series drifting, and how fast? | Mann-Kendall test (non-parametric, outlier-proof: small p = monotonic trend) + Sen's slope = robust per-step rate. Deseasonalize first when seasonality is strong |
+| `change_points(y, min_size=)` | Did the level break — and when? | Mean-shift detection by binary segmentation with a BIC-style penalty (stable series → `[]`). Line the indices up with deploys, price moves, campaigns, outages |
 
 ### forecasting.models — one interface: `fit(y)` → `predict(h)` / `predict_interval(h)`
 
@@ -439,7 +513,8 @@ All `@chart` functions: pass prepared data, get an `Axes` (multi-panel ones retu
 | `timeseries.lag_plot` / `timeseries.seasonal_subseries` | Lag dependence; seasonal profile consistency |
 | `timeseries.seasonal_decomposition` | Trend / seasonal / residual split |
 | `timeseries.forecast` / `timeseries.forecast_residuals` | Forecast vs actual with interval band; residual whiteness over time (test: `diagnostics.ljung_box`) |
-| `conceptual.*` | Teaching sketches (bias-variance, etc.) — no data statistics |
+| `conceptual.dag(edges)` | Causal DAG from (cause, effect) pairs — pick the adjustment set: block backdoor paths (confounders), don't condition on colliders or mediators |
+| `conceptual.gini_vs_entropy` / `conceptual.bias_variance` | Teaching sketches (impurity criteria, error decomposition) — functions of a parameter, not data |
 
 ---
 
@@ -448,12 +523,22 @@ All `@chart` functions: pass prepared data, get an `Axes` (multi-panel ones retu
 | Concept | Where it lives |
 |---|---|
 | Bias-variance trade-off | `evaluate.learning_curve_scores` / `validation_curve_scores` + `viz.model.learning_curve`; regularized models in `registry`; bagging vs boosting (ensembles) |
-| Linear-regression assumptions | `regression.linear_assumptions` (+ `vif`, `breusch_pagan`, `durbin_watson`), `stats.normality_test`, `viz.eda.qq`, `viz.model.residuals`/`scale_location` |
+| Linear & logistic regression | Inference: `regression.ols_fit` / `glm_fit(family="binomial")`; prediction: `registry.make_model("linear"/"logistic")` |
+| Generalized linear models | `regression.glm_fit` (poisson / binomial / gamma / gaussian); registry `poisson`/`gamma`/`tweedie` for the prediction side |
+| Fixed / random / mixed effects | `regression.fixed_effects` (within-entity, kills level confounding) vs `regression.mixed_effects` (random intercepts, partial pooling) |
+| Linear-regression assumptions / residual analysis | `regression.linear_assumptions` (+ `vif`, `breusch_pagan`, `durbin_watson`), `stats.normality_test`, `viz.eda.qq`, `viz.model.residuals`/`scale_location` |
 | Multicollinearity | `regression.vif`; `clean.drop_highly_correlated`; Ridge/Lasso/PCA |
-| p-value vs confidence interval | `stats.TestResult`, `stats.mean_confidence_interval`, `experiment.ExperimentResult.confidence_interval` |
-| CLT | Why `mean_confidence_interval`, t-tests, and `bayes_means` work at modest n |
+| p-value vs confidence interval | `stats.TestResult`, `stats.mean_confidence_interval` / `proportion_confidence_interval` / `bootstrap_ci`, `experiment.ExperimentResult.confidence_interval` |
+| CLT & law of large numbers | Why `mean_confidence_interval`, t-tests, and `bayes_means` work at modest n; `bootstrap_ci` is the same idea by simulation |
+| Type I vs Type II error | `alpha` in every test = the false-positive rate you accept; power = 1 − β via `stats.power` / `sample_size_*`; `experiment.msprt_means` keeps Type I controlled under peeking |
+| Bayes' theorem | `stats.bayes_rule` — the arithmetic behind all of `analytics.bayes` and `experiment.bayes_*` |
+| Bootstrapping | `stats.bootstrap_ci` (BCa resampling CI for any statistic) |
+| Permutation testing | `stats.permutation_test` (shuffle-based, assumption-free significance) |
 | Likelihood & MLE | `stats.fit_distribution` / `best_distribution` |
-| Bayesian vs frequentist | `experiment.bayes_conversions` / `bayes_means` vs `analyze_*`; `ThompsonSampling` |
+| Bayesian vs frequentist | `experiment.bayes_conversions` / `bayes_means` vs `analyze_*`; `analytics.bayes`; `ThompsonSampling` |
+| Prior / posterior / conjugate priors / credible intervals | `bayes.beta_posterior` (Beta-Binomial conjugacy spelled out); credible intervals also in `experiment.bayes_*` |
+| MCMC | `bayes.mcmc_sample` (random-walk Metropolis) |
+| Hierarchical models | `bayes.hierarchical_rates` (empirical-Bayes shrinkage); `regression.mixed_effects` (random intercepts) |
 | Decision trees & overfitting | `registry.make_model("tree", max_depth=, min_samples_leaf=)`; ensembles |
 | Bagging vs boosting | `random_forest`/`bagging` (variance ↓) vs `gradient_boosting`/`xgboost`/`lightgbm` (bias ↓); `ensemble.make_voting`/`make_stacking` |
 | Regularization (L1/L2/elastic net) | `ridge` / `lasso` / `elasticnet` in the registry |
@@ -461,6 +546,7 @@ All `@chart` functions: pass prepared data, get an `Axes` (multi-panel ones retu
 | Class imbalance | `imbalance.*`, anomaly detection fallback, PR-AUC/MCC in `evaluate`, `kpi.profit_threshold` |
 | Evaluation beyond accuracy | `evaluate.classification_metrics`, `viz.model.roc`/`precision_recall`/`calibration`, `kpi.profit` |
 | Curse of dimensionality | `segment.pca` (+ `rfecv_scores`, `mutual_information` for selection); `segment.tsne` for the eyes |
+| Feature engineering | The `features` package: `temporal` lags/rolling/calendar/cyclical, encodings + interactions in `transform`, text/geo helpers — promoted from notebooks, tested |
 | Missing data (MCAR/MAR/MNAR) | `stats.missingness` / `missingness_dependence`, `clean.add_missing_indicators`, `clean.fill_missing`, `preprocess.make_imputer("knn"/"iterative")` |
 | Outliers | `stats.outlier_bounds`, `clean.winsorize`, `anomaly.make_detector` |
 | Normalize vs standardize | `preprocess.make_scaler("minmax"/"standard"/"robust")` |
@@ -472,16 +558,36 @@ All `@chart` functions: pass prepared data, get an `Axes` (multi-panel ones retu
 | Stationarity (ADF/KPSS) | `diagnostics.stationarity_report` |
 | ARIMA/SARIMA & smoothing | `make_forecaster("arima"/"sarimax"/"ets")` |
 | Lag features & seasonality | `temporal.add_lags`/`add_rolling`, `diagnostics.dominant_period`, `viz.timeseries.acf`/`seasonal_decomposition` |
+| Trend analysis | `diagnostics.trend_test` (Mann-Kendall + Sen's slope); `viz.timeseries.rolling_stats` |
+| Change-point detection | `diagnostics.change_points` |
+| Forecast error metrics | `backtest.mae` / `rmse` / `mape` / `smape`, computed on `rolling_origin` backtests |
 | Drift (covariate/label/concept) | `monitor.psi`/`ks_drift` (covariate), `monitor.label_drift` (prior), score-drift via `drift_report` + delayed-label re-evaluation (concept) |
 | A/B design, SRM, power, peeking | `stats.sample_size_*`/`power`, `experiment.srm_check`, `experiment.msprt_means`, `experiment.cuped_adjust` |
-| Correlation vs causation; confounders | `analytics.causal` (matching, IPW, DiD, IV); stratify via `subgroup_effects` |
+| Correlation vs causation; confounders | `analytics.causal` (matching, IPW, DiD, IV); stratify via `subgroup_effects`; draw the graph with `viz.conceptual.dag` |
+| RCTs / A/B as gold standard | `analytics.experiment` end-to-end: `stats.sample_size_*` → `srm_check` → `analyze_*` / `bayes_*`; the causal tools exist for when you *can't* randomize |
+| Average treatment effect (ATE) | `causal.uplift` (randomized), `causal.ipw_ate` (weighted), matched ATT via `match_on_propensity`; LATE via `itt_tot` / `iv_effect` |
 | ITT vs TOT | `causal.itt_tot` |
 | Instrumental variables | `causal.iv_effect` |
 | DiD vs PSM | `causal.difference_in_differences` (unobserved time-invariant confounders) vs `propensity_scores` + `match_on_propensity` (observed ones) |
+| Regression discontinuity (RDD) | `causal.regression_discontinuity` — threshold rules as local experiments |
+| Synthetic control & counterfactual analysis | `causal.synthetic_control` builds the explicit "what would have happened" series; DiD and `experiment` lifts are counterfactual differences |
+| Causal graphs (DAGs) | `viz.conceptual.dag` — sketch the graph, choose what to adjust for |
 | Heterogeneous treatment effects | `causal.subgroup_effects`; uplift by segment |
-| Selection bias | randomize; `transform.stratified_sample`; matching/weighting in `causal` |
+| Uplift modeling & incrementality | `causal.TLearner` + `qini_points` / `qini_auc` (individual-level); campaign incrementality via `experiment.analyze_*`, DiD, or `synthetic_control` |
+| Simpson's paradox | `stats.simpsons_check` — pooled vs within-group slopes, reversal flag |
+| Selection / sampling bias | randomize; `transform.stratified_sample`; matching/weighting in `causal`; check sample-vs-population representativeness with `monitor.drift_report` |
+| Survivorship bias | A design trap, not a function: build cohorts from *entry* (`features.period`, `viz.timeseries.cohort_heatmap`) so churned/failed units stay in the denominator |
+| Measurement error | Noisy regressors attenuate effects toward 0 — gate inputs with `validate.check_schema`, and use an instrument (`causal.iv_effect`) when the mismeasured variable is the treatment |
+| Expected value & cost-benefit | `kpi.profit.expected_value` / `profit_curve` / `profit_threshold`; `kpi.financial.roi` |
+| Expected utility & risk attitude | `scenario.expected_utility` / `certainty_equivalent` (risk premium = EV − CE) |
+| Sensitivity & scenario analysis | `scenario.sensitivity` (tornado), `scenario.scenario_table` (coherent what-ifs) |
+| Customer lifetime value | `kpi.financial.clv` (+ churn / retention / NRR helpers) |
+| Price elasticity & revenue optimization | `pricing.elasticity.fit_demand` / `price_elasticity` + `pricing.optimize.optimal_price` / `markup_price` |
+| Entropy / cross-entropy / KL / information gain | `stats.entropy`; cross-entropy = `log_loss` in `evaluate.classification_metrics`; `stats.kl_divergence` (+ `monitor.psi`); `stats.information_gain` / `mutual_information` |
 
 Out of scope by design: deep learning (CNNs/RNNs/transformers — this workspace is tabular/text/geo;
 `mlp` and `sgd` in the registry are the in-stack neural options) and tools requiring extra
 dependencies (Prophet → covered by `ets`/`sarimax` + holiday flags; causal forests → start with
-`subgroup_effects`; UMAP → `tsne`).
+`subgroup_effects` / `TLearner`; UMAP → `tsne`; LIME → the SHAP charts cover local explanations;
+PyMC/Stan → `bayes.mcmc_sample` for small problems; ruptures → `diagnostics.change_points`;
+networkx DAG tooling → `viz.conceptual.dag`).

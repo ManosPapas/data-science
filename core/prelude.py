@@ -14,12 +14,12 @@ import polars as pl
 import polars.selectors as cs
 
 from core import pricing
-from core.analytics import causal, experiment, regression, stats
+from core.analytics import bayes, causal, experiment, regression, stats
 from core.api.client import get_client, paginate
 from core.api.graphql import graphql, paginate_graphql
 from core.db.engine import get_engine
 from core.db.query import load_sql_file, read_sql, write_sql
-from core.decision import bandits, optimize
+from core.decision import bandits, optimize, scenario
 from core.features import clean, geo, period, temporal, text, transform, validate
 from core.forecasting import backtest, diagnostics
 from core.forecasting.models import make_forecaster
@@ -70,6 +70,7 @@ __all__ = [
     "backtest",
     "bandits",
     "base",
+    "bayes",
     "behaviour",
     "cached",
     "catalog",
@@ -119,6 +120,7 @@ __all__ = [
     "regression",
     "report",
     "scan_parquet",
+    "scenario",
     "segment",
     "set_theme",
     "split",

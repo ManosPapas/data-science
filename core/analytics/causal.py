@@ -1,14 +1,16 @@
-"""Causal inference — DiD, propensity matching & weighting, IV / non-compliance, uplift (ATE).
+"""Causal inference — DiD, matching/weighting, IV, RDD, synthetic control, uplift modeling.
 
-Matching and weighting remove *observed* confounding; DiD removes time-invariant unobserved
-confounding; instruments handle confounded treatment when a valid instrument exists. Pick by which
-assumption you can defend, not by which estimate you like.
+Each design buys identification with a different assumption: matching/weighting remove *observed*
+confounding, DiD removes time-invariant unobserved confounding, instruments handle confounded
+treatment, RDD exploits a threshold rule, synthetic control builds an explicit counterfactual for
+one treated unit. Pick by which assumption you can defend, not by which estimate you like.
 """
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from dataclasses import dataclass
-from typing import Any
+from typing import Any, Self
 
 import numpy as np
 import polars as pl
@@ -122,6 +124,179 @@ def iv_effect(outcome: ArrayLike, treatment: ArrayLike, instrument: ArrayLike) -
     if abs(denominator) < 1e-12:
         raise ValueError("weak instrument: cov(instrument, treatment) is ~0")
     return float(np.cov(z, y)[0, 1] / denominator)
+
+
+@dataclass(frozen=True)
+class RddResult:
+    """Sharp regression-discontinuity estimate at the cutoff."""
+
+    effect: float
+    std_err: float
+    p_value: float
+    n_left: int
+    n_right: int
+
+
+def regression_discontinuity(
+    running: ArrayLike, outcome: ArrayLike, *, cutoff: float, bandwidth: float | None = None
+) -> RddResult:
+    """Sharp RDD: the outcome jump at a threshold rule (credit score, spend tier, exam mark).
+
+    Units just below and just above the cutoff are as-good-as-randomized, so the fitted jump at
+    the cutoff is causal — *locally*, for units near the threshold. Fits a linear trend with
+    separate slopes per side within ``bandwidth`` of the cutoff (None = all data); shrink the
+    bandwidth to trade bias for noise and check the estimate is stable across choices. Invalid if
+    units can precisely manipulate their running variable (look for bunching at the cutoff).
+    """
+    import statsmodels.api as sm
+
+    centred = np.asarray(running, dtype=float) - cutoff
+    values = np.asarray(outcome, dtype=float)
+    if bandwidth is not None:
+        keep = np.abs(centred) <= bandwidth
+        centred, values = centred[keep], values[keep]
+    above = (centred >= 0).astype(float)
+    n_right = int(above.sum())
+    n_left = int(above.size - n_right)
+    if min(n_left, n_right) < 3:
+        raise ValueError("too few observations on one side of the cutoff")
+    exog = np.column_stack([np.ones(centred.size), above, centred, above * centred])
+    result = sm.OLS(values, exog).fit()
+    return RddResult(
+        float(result.params[1]), float(result.bse[1]), float(result.pvalues[1]), n_left, n_right
+    )
+
+
+@dataclass(frozen=True)
+class SyntheticControlResult:
+    """Donor weights, the synthetic counterfactual, and the estimated effect."""
+
+    weights: pl.DataFrame
+    effect: float
+    pre_rmse: float
+    synthetic_pre: NDArray[np.float64]
+    synthetic_post: NDArray[np.float64]
+
+
+def synthetic_control(
+    treated_pre: ArrayLike,
+    donors_pre: ArrayLike,
+    treated_post: ArrayLike,
+    donors_post: ArrayLike,
+    *,
+    labels: Sequence[str] | None = None,
+) -> SyntheticControlResult:
+    """One treated unit (market, region, store) and no natural control: build one from donors.
+
+    Finds non-negative, sum-to-one donor weights that best track the treated unit *before* the
+    intervention; the post-period gap to that synthetic twin is the effect — an explicit
+    counterfactual for "what would have happened otherwise". Donor matrices are (time, donors).
+    Trust requires a small ``pre_rmse`` and donors untouched by the intervention; gauge
+    significance by rerunning on each donor as a placebo.
+    """
+    from scipy.optimize import minimize
+
+    pre_treated = np.asarray(treated_pre, dtype=float)
+    pre_donors = np.asarray(donors_pre, dtype=float)
+    post_treated = np.asarray(treated_post, dtype=float)
+    post_donors = np.asarray(donors_post, dtype=float)
+    n_donors = pre_donors.shape[1]
+
+    def gap(weights: NDArray[np.float64]) -> float:
+        return float(np.sum((pre_treated - pre_donors @ weights) ** 2))
+
+    solution = minimize(
+        gap,
+        np.full(n_donors, 1.0 / n_donors),
+        method="SLSQP",
+        bounds=[(0.0, 1.0)] * n_donors,
+        constraints=[{"type": "eq", "fun": lambda w: float(np.sum(w) - 1.0)}],
+    )
+    weights = np.asarray(solution.x, dtype=float)
+    synthetic_pre = pre_donors @ weights
+    synthetic_post = post_donors @ weights
+    names = list(labels) if labels is not None else [f"donor_{i}" for i in range(n_donors)]
+    return SyntheticControlResult(
+        pl.DataFrame({"donor": names, "weight": weights}).sort("weight", descending=True),
+        float(np.mean(post_treated - synthetic_post)),
+        float(np.sqrt(np.mean((pre_treated - synthetic_pre) ** 2))),
+        synthetic_pre,
+        synthetic_post,
+    )
+
+
+class TLearner:
+    """Uplift model (T-learner): predicts *who responds to treatment*, not who converts.
+
+    Fits one outcome model on treated rows and one on control rows; predicted uplift is the
+    difference. Rank customers by it to find persuadables (positive uplift) versus sure things
+    and lost causes (~0) versus do-not-disturb (negative) — targeting on conversion probability
+    instead wastes spend on people who'd convert anyway. Train on randomized data (or weight/
+    match first); evaluate the *ranking* with :func:`qini_auc`, never with accuracy.
+    """
+
+    def __init__(self, model: Any) -> None:
+        from sklearn.base import clone
+
+        self.treated_model = clone(model)
+        self.control_model = clone(model)
+
+    def fit(self, x: Any, treatment: ArrayLike, outcome: ArrayLike) -> Self:
+        features = np.asarray(x, dtype=float)
+        treated = np.asarray(treatment).astype(bool)
+        y = np.asarray(outcome)
+        self.treated_model.fit(features[treated], y[treated])
+        self.control_model.fit(features[~treated], y[~treated])
+        return self
+
+    def predict(self, x: Any) -> NDArray[np.float64]:
+        features = np.asarray(x, dtype=float)
+        treated = self._expected(self.treated_model, features)
+        control = self._expected(self.control_model, features)
+        return np.asarray(treated - control, dtype=float)
+
+    @staticmethod
+    def _expected(model: Any, features: NDArray[np.float64]) -> NDArray[np.float64]:
+        if hasattr(model, "predict_proba"):
+            return np.asarray(model.predict_proba(features)[:, 1], dtype=float)
+        return np.asarray(model.predict(features), dtype=float)
+
+
+def qini_points(
+    outcome: ArrayLike, treatment: ArrayLike, scores: ArrayLike
+) -> tuple[NDArray[np.float64], NDArray[np.float64]]:
+    """Qini curve: incremental successes vs share of the population targeted, ranked by uplift.
+
+    At each depth the curve shows treated successes minus control successes (scaled to the
+    treated count) among the top-scored units — what targeting that slice *adds* over not
+    treating. A useful model bows above the straight random-targeting line from (0, 0) to the
+    full-population endpoint; plot with a line chart plus that diagonal.
+    """
+    y = np.asarray(outcome, dtype=float)
+    t = np.asarray(treatment).astype(float)
+    order = np.argsort(-np.asarray(scores, dtype=float), kind="stable")
+    y_sorted, t_sorted = y[order], t[order]
+    cum_treated = np.cumsum(t_sorted)
+    cum_control = np.cumsum(1.0 - t_sorted)
+    treated_successes = np.cumsum(y_sorted * t_sorted)
+    control_successes = np.cumsum(y_sorted * (1.0 - t_sorted))
+    ratio = np.divide(
+        cum_treated, cum_control, out=np.zeros_like(cum_treated), where=cum_control > 0
+    )
+    fractions = np.arange(1, y.size + 1) / y.size
+    return fractions, treated_successes - control_successes * ratio
+
+
+def qini_auc(outcome: ArrayLike, treatment: ArrayLike, scores: ArrayLike) -> float:
+    """Area between the Qini curve and random targeting — bigger = better uplift *ranking*.
+
+    The uplift world's AUC: ~0 means the model ranks no better than chance, negative means worse.
+    Compare uplift models on this — a great outcome classifier can still be a useless uplift
+    ranker, because predicting conversion is not predicting persuasion.
+    """
+    fractions, qini = qini_points(outcome, treatment, scores)
+    random_line = qini[-1] * fractions
+    return float(np.trapezoid(qini - random_line, fractions))
 
 
 def subgroup_effects(

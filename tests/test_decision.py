@@ -1,10 +1,11 @@
-"""Tests for decision.bandits and decision.optimize."""
+"""Tests for decision.bandits, decision.optimize, and decision.scenario."""
 
 from __future__ import annotations
 
 import numpy as np
+import polars as pl
 
-from core.decision import bandits, optimize
+from core.decision import bandits, optimize, scenario
 
 
 def test_epsilon_greedy_learns_best_arm() -> None:
@@ -50,3 +51,32 @@ def test_linear_program() -> None:
 def test_assignment() -> None:
     _, cols = optimize.assign([[1.0, 2.0], [2.0, 1.0]])
     assert sorted(cols.tolist()) == [0, 1]
+
+
+def test_expected_utility_and_certainty_equivalent() -> None:
+    outcomes = [0.0, 100.0]
+    probabilities = [0.5, 0.5]
+    assert scenario.expected_utility(outcomes, probabilities) == 50.0  # a=0 -> plain EV
+    ce = scenario.certainty_equivalent(outcomes, probabilities, risk_aversion=0.02)
+    assert ce < 50.0  # risk-averse: the gamble is worth less than its mean
+    assert scenario.certainty_equivalent(outcomes, probabilities) == 50.0
+
+
+def test_scenario_table_values_what_ifs() -> None:
+    def value(price: float, volume: float, cost: float) -> float:
+        return (price - cost) * volume
+
+    base = {"price": 10.0, "volume": 1000.0, "cost": 6.0}
+    table = scenario.scenario_table(value, base, {"downturn": {"volume": 600.0}})
+    assert table.filter(pl.col("scenario") == "base")["value"][0] == 4000.0
+    assert table.filter(pl.col("scenario") == "downturn")["vs_base"][0] == -1600.0
+
+
+def test_sensitivity_ranks_the_big_lever_first() -> None:
+    def value(price: float, volume: float, cost: float) -> float:
+        return (price - cost) * volume
+
+    base = {"price": 10.0, "volume": 1000.0, "cost": 6.0}
+    tornado = scenario.sensitivity(value, base, {"price": (9.0, 11.0), "cost": (5.8, 6.2)})
+    assert tornado["input"][0] == "price"  # |2000| swing beats |-400|
+    assert tornado.filter(pl.col("input") == "cost")["swing"][0] == -400.0

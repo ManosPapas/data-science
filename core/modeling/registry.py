@@ -29,6 +29,7 @@ from sklearn.ensemble import (
 from sklearn.linear_model import (
     BayesianRidge,
     ElasticNet,
+    GammaRegressor,
     HuberRegressor,
     Lasso,
     LinearRegression,
@@ -38,6 +39,7 @@ from sklearn.linear_model import (
     Ridge,
     RidgeClassifier,
     SGDClassifier,
+    TweedieRegressor,
 )
 from sklearn.naive_bayes import BernoulliNB, GaussianNB
 from sklearn.neighbors import KNeighborsClassifier, KNeighborsRegressor
@@ -80,6 +82,8 @@ _REGRESSORS: dict[str, Factory] = {
     "huber": HuberRegressor,
     "quantile": QuantileRegressor,
     "poisson": PoissonRegressor,
+    "gamma": GammaRegressor,
+    "tweedie": TweedieRegressor,
     "knn": KNeighborsRegressor,
     "svr": SVR,
     "linear_svr": LinearSVR,

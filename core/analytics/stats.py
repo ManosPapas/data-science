@@ -6,7 +6,7 @@ notebook says ``welch_t_test(a, b).p_value`` rather than re-deriving the plumbin
 
 from __future__ import annotations
 
-from collections.abc import Sequence
+from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 from typing import Any
 
@@ -174,6 +174,64 @@ def mean_confidence_interval(data: Floats, confidence: float = 0.95) -> tuple[fl
     return mean, mean - half_width, mean + half_width
 
 
+def proportion_confidence_interval(
+    successes: int, trials: int, *, confidence: float = 0.95
+) -> tuple[float, float, float]:
+    """(rate, lower, upper) Wilson score interval for a proportion (conversion, CTR, churn).
+
+    Stays inside [0, 1] and behaves at small n and extreme rates, where the naive Wald interval
+    (p ± z·SE) collapses to zero width or spills outside — the standard error bar for rates.
+    """
+    z = float(stats.norm.ppf((1 + confidence) / 2))
+    rate = successes / trials
+    denom = 1 + z**2 / trials
+    centre = (rate + z**2 / (2 * trials)) / denom
+    half = z * float(np.sqrt(rate * (1 - rate) / trials + z**2 / (4 * trials**2))) / denom
+    return rate, centre - half, centre + half
+
+
+def bootstrap_ci(
+    data: Floats,
+    statistic: Callable[..., Any] = np.mean,
+    *,
+    confidence: float = 0.95,
+    n_resamples: int = 2000,
+    method: str = "BCa",
+    seed: int = 42,
+) -> tuple[float, float, float]:
+    """(estimate, lower, upper) for *any* statistic by resampling — no formula, no normality.
+
+    Resamples the data with replacement, recomputes ``statistic`` each time, and reads the CI off
+    that empirical distribution ('BCa' corrects bias and skew; 'percentile'/'basic' are simpler).
+    The tool for medians, ratios, quantiles, trimmed means — anything without a clean closed-form
+    standard error. Mirrors the CLT idea by simulation instead of theory.
+    """
+    arr = np.asarray(data, dtype=float)
+    result = stats.bootstrap(
+        (arr,),
+        statistic,
+        n_resamples=n_resamples,
+        confidence_level=confidence,
+        method=method,
+        rng=np.random.default_rng(seed),
+    )
+    interval = result.confidence_interval
+    return float(statistic(arr)), float(interval.low), float(interval.high)
+
+
+def bayes_rule(prior: float, true_positive_rate: float, false_positive_rate: float) -> float:
+    """Posterior P(hypothesis | positive signal) via Bayes' theorem.
+
+    ``prior`` = P(H) base rate, ``true_positive_rate`` = P(signal | H), ``false_positive_rate``
+    = P(signal | not H). The base-rate lesson: a 99%-sensitive test with a 5% false-positive
+    rate on a 1% prior yields only ~17% — evidence *updates* the prior, it doesn't replace it.
+    Useful for fraud alerts, test results, lead scoring; the same arithmetic underlies
+    ``analytics.bayes`` and the ``experiment.bayes_*`` tools.
+    """
+    signal_rate = true_positive_rate * prior + false_positive_rate * (1.0 - prior)
+    return true_positive_rate * prior / signal_rate if signal_rate else 0.0
+
+
 # --- Distribution & shape -----------------------------------------------------------------------
 
 
@@ -325,6 +383,31 @@ def correlation_test(a: Floats, b: Floats, *, method: str = "pearson") -> TestRe
     return TestResult(float(statistic), float(p_value))
 
 
+def permutation_test(
+    a: Floats, b: Floats, *, n_resamples: int = 10_000, seed: int = 42
+) -> TestResult:
+    """Difference in means with significance from label shuffling — no distributional assumptions.
+
+    Under H0 the group labels are arbitrary, so reshuffling them maps out the null distribution
+    of mean(a) - mean(b); the p-value is the share of shuffles at least as extreme as observed.
+    Reach for it at small n or with ugly distributions when you still want to compare *means*
+    (``mann_whitney`` compares ranks, a different question).
+    """
+
+    def _mean_diff(x: Any, y: Any, axis: int = -1) -> Any:
+        return np.mean(x, axis=axis) - np.mean(y, axis=axis)
+
+    result = stats.permutation_test(
+        (np.asarray(a, dtype=float), np.asarray(b, dtype=float)),
+        _mean_diff,
+        permutation_type="independent",
+        n_resamples=n_resamples,
+        alternative="two-sided",
+        rng=np.random.default_rng(seed),
+    )
+    return TestResult(float(result.statistic), float(result.pvalue))
+
+
 # --- Relationships ------------------------------------------------------------------------------
 
 
@@ -351,6 +434,88 @@ def mutual_information(df: pl.DataFrame, target: str, *, task: str = "regression
     estimator = mutual_info_classif if task == "classification" else mutual_info_regression
     scores = estimator(combined.select(feature_cols).to_numpy(), combined[target].to_numpy())
     return pl.DataFrame({"feature": feature_cols, "mi": scores}).sort("mi", descending=True)
+
+
+def simpsons_check(df: pl.DataFrame, *, x: str, y: str, group: str) -> dict[str, Any]:
+    """Does the x-y association flip once you condition on ``group``? (Simpson's paradox.)
+
+    Compares the pooled OLS slope of y on x against per-group slopes. ``reversal=True`` — the
+    pooled and size-weighted within-group slopes disagree in sign — means the headline trend is
+    an artifact of group composition. Which margin to report is a causal question: condition on
+    the group if it's a confounder, don't if it's on the causal path.
+    """
+    sub = df.select([x, y, group]).drop_nulls()
+
+    def _slope(frame: pl.DataFrame) -> float | None:
+        xs = frame[x].to_numpy().astype(float)
+        ys = frame[y].to_numpy().astype(float)
+        if xs.size < 3 or float(xs.var(ddof=1)) == 0.0:
+            return None
+        return float(np.cov(xs, ys)[0, 1] / xs.var(ddof=1))
+
+    overall = _slope(sub)
+    rows: list[dict[str, Any]] = []
+    for level in sub.select(group).unique().sort(group).to_series().to_list():
+        slope = _slope(sub.filter(pl.col(group) == level))
+        if slope is not None:
+            rows.append(
+                {"group": level, "n": sub.filter(pl.col(group) == level).height, "slope": slope}
+            )
+    by_group = pl.DataFrame(
+        rows, schema={"group": sub.schema[group], "n": pl.Int64, "slope": pl.Float64}
+    )
+    within = (
+        float(np.average(by_group["slope"].to_numpy(), weights=by_group["n"].to_numpy()))
+        if by_group.height
+        else None
+    )
+    reversal = overall is not None and within is not None and overall * within < 0
+    return {
+        "overall_slope": overall,
+        "within_slope": within,
+        "by_group": by_group,
+        "reversal": reversal,
+    }
+
+
+# --- Information theory ---------------------------------------------------------------------
+
+
+def entropy(labels: ArrayLike, *, base: float = 2.0) -> float:
+    """Shannon entropy of a categorical sample (bits by default) — how unpredictable is it?
+
+    0 = a single category; log2(k) = uniform over k categories. The uncertainty currency that
+    information gain, mutual information, and tree-split criteria (entropy vs Gini) trade in.
+    """
+    _, counts = np.unique(np.asarray(labels).astype(str), return_counts=True)
+    return float(stats.entropy(counts, base=base))
+
+
+def kl_divergence(p: Floats, q: Floats, *, base: float = 2.0) -> float:
+    """KL(P ‖ Q): the extra bits paid for modelling P with Q. Asymmetric; 0 iff identical.
+
+    Takes two probability vectors over the same categories (normalized internally). Relatives:
+    ``modeling.monitor.psi`` is a symmetrized KL over quantile bins, and classifier ``log_loss``
+    is cross-entropy = H(P) + KL(P ‖ Q) — minimizing it minimizes the divergence from truth.
+    """
+    return float(stats.entropy(np.asarray(p, dtype=float), np.asarray(q, dtype=float), base=base))
+
+
+def information_gain(df: pl.DataFrame, feature: str, target: str, *, base: float = 2.0) -> float:
+    """Entropy drop in ``target`` from knowing categorical ``feature`` — the tree-split criterion.
+
+    H(target) - Σ p(level)·H(target | level), in bits: 0 means the feature tells you nothing;
+    H(target) means it determines the target. Equals the mutual information between the two
+    categorical columns (``mutual_information`` is the numeric-feature counterpart).
+    """
+    sub = df.select([feature, target]).drop_nulls()
+    total = entropy(sub[target].cast(pl.String).to_numpy(), base=base)
+    conditional = 0.0
+    for level in sub.select(feature).unique().to_series().to_list():
+        group = sub.filter(pl.col(feature) == level)
+        share = group.height / sub.height
+        conditional += share * entropy(group[target].cast(pl.String).to_numpy(), base=base)
+    return total - conditional
 
 
 # --- Size & power -------------------------------------------------------------------------------

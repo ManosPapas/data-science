@@ -31,6 +31,8 @@ def test_model_charts_return_axes(rng: np.random.Generator) -> None:
 def test_cluster_and_conceptual_charts() -> None:
     assert isinstance(cluster.elbow([2, 3, 4], [10.0, 6.0, 4.0]), Axes)
     assert isinstance(conceptual.gini_vs_entropy(), Axes)
+    edges = [("season", "price"), ("season", "demand"), ("price", "demand")]
+    assert isinstance(conceptual.dag(edges), Axes)
 
 
 def test_chart_decorator_options(rng: np.random.Generator) -> None:

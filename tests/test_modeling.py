@@ -27,6 +27,11 @@ def test_available_models_nonempty() -> None:
     assert "xgboost" in registry.available_models("regression")
 
 
+def test_glm_regressors_construct() -> None:
+    for name in ("gamma", "tweedie"):
+        assert hasattr(registry.make_model(name, task="regression"), "fit")
+
+
 def test_fit_and_predict() -> None:
     rng = np.random.default_rng(0)
     x = rng.normal(size=(60, 3))

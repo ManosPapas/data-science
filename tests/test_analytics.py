@@ -1,11 +1,11 @@
-"""Tests for analytics.experiment, analytics.causal, and analytics.regression."""
+"""Tests for analytics.experiment, analytics.causal, analytics.regression, analytics.bayes."""
 
 from __future__ import annotations
 
 import numpy as np
 import polars as pl
 
-from core.analytics import causal, experiment, regression
+from core.analytics import bayes, causal, experiment, regression
 
 
 def test_analyze_means_detects_lift(rng: np.random.Generator) -> None:
@@ -156,3 +156,117 @@ def test_linear_assumptions_reports_every_check(rng: np.random.Generator) -> Non
         "max_vif_feature",
     }
     assert float(out["normality_p"]) > 0.05  # well-behaved residuals pass
+
+
+def test_ols_fit_reads_the_slope(rng: np.random.Generator) -> None:
+    x = rng.normal(0.0, 1.0, 300)
+    df = pl.DataFrame({"x": x, "y": 2.0 * x + 1.0 + rng.normal(0.0, 0.5, 300)})
+    fit = regression.ols_fit(df, y="y", x=["x"])
+    coef = fit.coefficients.filter(pl.col("term") == "x")
+    assert abs(coef["coef"][0] - 2.0) < 0.1
+    assert coef["p_value"][0] < 0.001
+    assert coef["ci_low"][0] < 2.0 < coef["ci_high"][0]
+    assert fit.r_squared is not None and fit.r_squared > 0.8
+
+
+def test_glm_fit_poisson_recovers_the_log_rate(rng: np.random.Generator) -> None:
+    x = rng.normal(0.0, 1.0, 500)
+    df = pl.DataFrame({"x": x, "y": rng.poisson(np.exp(0.3 + 0.7 * x))})
+    fit = regression.glm_fit(df, y="y", x=["x"], family="poisson")
+    assert abs(fit.coefficients.filter(pl.col("term") == "x")["coef"][0] - 0.7) < 0.1
+    assert fit.r_squared is None
+
+
+def test_fixed_effects_absorbs_entity_confounding(rng: np.random.Generator) -> None:
+    entities = np.repeat(np.arange(20), 30)
+    entity_level = entities.astype(float)  # entity-level confounder
+    x = rng.normal(0.0, 1.0, 600) + 0.3 * entity_level
+    y = 2.0 * x + 5.0 * entity_level + rng.normal(0.0, 0.5, 600)
+    df = pl.DataFrame({"x": x, "y": y, "store": entities})
+    pooled = regression.ols_fit(df, y="y", x=["x"]).coefficients
+    within = regression.fixed_effects(df, y="y", x=["x"], entity="store").coefficients
+    pooled_coef = pooled.filter(pl.col("term") == "x")["coef"][0]
+    within_coef = within.filter(pl.col("term") == "x")["coef"][0]
+    assert abs(within_coef - 2.0) < 0.1  # demeaning recovers the true within effect
+    assert abs(within_coef - 2.0) < abs(pooled_coef - 2.0)  # pooled OLS is confounded
+
+
+def test_mixed_effects_partial_pooling(rng: np.random.Generator) -> None:
+    groups = np.repeat(np.arange(12), 40)
+    intercepts = rng.normal(0.0, 2.0, 12)[groups]
+    x = rng.normal(0.0, 1.0, 480)
+    df = pl.DataFrame({"x": x, "y": 1.5 * x + intercepts + rng.normal(0.0, 0.5, 480), "g": groups})
+    fit = regression.mixed_effects(df, y="y", x=["x"], group="g")
+    assert abs(fit.coefficients.filter(pl.col("term") == "x")["coef"][0] - 1.5) < 0.1
+    assert fit.group_variance is not None and fit.group_variance > 1.0
+
+
+def test_beta_posterior_updates_toward_data() -> None:
+    post = bayes.beta_posterior(30, 100, prior=(1.0, 1.0))
+    assert abs(post.mean - 31 / 102) < 1e-9
+    assert post.lower < 0.3 < post.upper
+
+
+def test_hierarchical_rates_shrinks_small_groups_hardest() -> None:
+    frame, prior = bayes.hierarchical_rates(
+        [1, 50, 30], [2, 100, 100], labels=["tiny", "big", "mid"]
+    )
+    tiny = frame.filter(pl.col("group") == "tiny")
+    big = frame.filter(pl.col("group") == "big")
+    tiny_move = abs(tiny["shrunk_rate"][0] - tiny["rate"][0])
+    big_move = abs(big["shrunk_rate"][0] - big["rate"][0])
+    assert tiny_move > big_move  # n=2 shrinks toward the pool, n=100 barely moves
+    assert prior[0] > 0 and prior[1] > 0
+
+
+def test_mcmc_recovers_a_normal_mean(rng: np.random.Generator) -> None:
+    data = rng.normal(3.0, 1.0, 200)
+
+    def log_density(theta: np.ndarray) -> float:
+        return float(-0.5 * np.sum((data - theta[0]) ** 2))
+
+    samples, acceptance = bayes.mcmc_sample(
+        log_density, [0.0], n_samples=3000, burn_in=500, step=0.2, seed=0
+    )
+    assert abs(samples[:, 0].mean() - 3.0) < 0.1
+    assert 0.05 < acceptance < 0.95
+
+
+def test_regression_discontinuity_recovers_the_jump(rng: np.random.Generator) -> None:
+    running = rng.uniform(-1.0, 1.0, 800)
+    outcome = 1.0 * running + 2.0 * (running >= 0) + rng.normal(0.0, 0.3, 800)
+    result = causal.regression_discontinuity(running, outcome, cutoff=0.0)
+    assert abs(result.effect - 2.0) < 0.15
+    assert result.p_value < 0.001
+    assert result.n_left > 0 and result.n_right > 0
+
+
+def test_synthetic_control_tracks_and_measures(rng: np.random.Generator) -> None:
+    donors_pre = rng.normal(10.0, 2.0, (40, 4))
+    donors_post = rng.normal(10.0, 2.0, (10, 4))
+    true_weights = np.array([0.7, 0.3, 0.0, 0.0])
+    result = causal.synthetic_control(
+        donors_pre @ true_weights,
+        donors_pre,
+        donors_post @ true_weights + 5.0,  # +5 lift after the intervention
+        donors_post,
+    )
+    assert result.pre_rmse < 0.5
+    assert abs(result.effect - 5.0) < 0.5
+    assert abs(result.weights["weight"].sum() - 1.0) < 1e-6
+
+
+def test_tlearner_and_qini_rank_the_persuadables(rng: np.random.Generator) -> None:
+    from core.modeling.registry import make_model
+
+    n = 2000
+    x = rng.normal(0.0, 1.0, (n, 2))
+    treated = rng.integers(0, 2, n)
+    true_uplift = np.where(x[:, 0] > 0, 0.3, 0.0)  # only x0 > 0 responds
+    y = (rng.random(n) < 0.2 + true_uplift * treated).astype(int)
+    learner = causal.TLearner(make_model("logistic", task="classification", max_iter=500))
+    scores = learner.fit(x, treated, y).predict(x)
+    assert scores[x[:, 0] > 0].mean() > scores[x[:, 0] <= 0].mean()
+    fractions, qini = causal.qini_points(y, treated, scores)
+    assert fractions.shape == qini.shape == (n,)
+    assert causal.qini_auc(y, treated, scores) > 0.0
