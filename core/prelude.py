@@ -68,7 +68,18 @@ from core.modeling import (
 )
 from core.utils import report
 from core.utils.memory import memory_report
-from core.viz import base, cluster, conceptual, eda, explain, interactive, model, timeseries
+from core.viz import (
+    base,
+    cluster,
+    conceptual,
+    decision,
+    eda,
+    explain,
+    interactive,
+    model,
+    network,
+    timeseries,
+)
 from core.viz.base import set_theme
 
 # Notebook ergonomics — runs on import. This prelude is the interactive layer only (library modules
@@ -99,6 +110,7 @@ __all__ = [
     "conceptual",
     "cs",
     "curves",
+    "decision",
     "diagnostics",
     "drivers",
     "eda",
@@ -123,6 +135,7 @@ __all__ = [
     "memory_report",
     "model",
     "monitor",
+    "network",
     "np",
     "optimize",
     "paginate",

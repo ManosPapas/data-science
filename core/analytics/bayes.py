@@ -121,3 +121,43 @@ def mcmc_sample(
         if i >= burn_in:
             samples[i - burn_in] = current
     return samples, accepted / (n_samples + burn_in)
+
+
+@dataclass(frozen=True)
+class GammaPosterior:
+    """A posterior summary for a rate: point estimate, credible interval, Gamma parameters."""
+
+    mean: float
+    lower: float
+    upper: float
+    shape: float
+    rate: float
+
+
+def gamma_posterior(
+    events: float,
+    exposure: float,
+    *,
+    prior: tuple[float, float] = (1.0, 1.0),
+    confidence: float = 0.95,
+) -> GammaPosterior:
+    """Conjugate Gamma-Poisson update for a rate per unit of exposure — Bayesian rate estimation.
+
+    The Poisson sibling of :func:`beta_posterior`: Gamma(shape a, rate b) prior + k events over
+    exposure t (hours, customers, machine-days) → Gamma(a+k, b+t), posterior mean (a+k)/(b+t).
+    Use it for arrival, defect, claim, or purchase *rates* where the Beta-Binomial's bounded
+    "successes out of trials" framing doesn't fit. The prior reads as "a pseudo-events over b
+    pseudo-exposure" — encode history when fresh exposure is thin.
+    """
+    from scipy.stats import gamma as gamma_dist
+
+    if events < 0 or exposure <= 0:
+        raise ValueError("events must be non-negative and exposure positive")
+    if min(prior) <= 0:
+        raise ValueError("prior (shape, rate) must both be positive")
+    shape = prior[0] + events
+    rate = prior[1] + exposure
+    lower, upper = gamma_dist.ppf(
+        [(1 - confidence) / 2, (1 + confidence) / 2], shape, scale=1.0 / rate
+    )
+    return GammaPosterior(shape / rate, float(lower), float(upper), float(shape), float(rate))

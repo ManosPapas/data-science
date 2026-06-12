@@ -10,8 +10,12 @@ for a classifier KS, use ``eda.ks`` on the per-class score arrays — no duplica
 
 from __future__ import annotations
 
+from collections.abc import Sequence
+from typing import Any
+
 import numpy as np
 import pandas as pd
+import polars as pl
 import seaborn as sns
 from matplotlib.axes import Axes
 from numpy.typing import ArrayLike
@@ -272,3 +276,129 @@ def model_comparison(ax: Axes, scores_by_model: dict[str, ArrayLike]) -> None:
     ax.boxplot(data)
     ax.set_xticks(range(1, len(labels) + 1), labels=labels)
     ax.set(ylabel="fold score")
+
+
+# --- Feature-space views ----------------------------------------------------------------------
+
+
+@chart(title="Decision boundary")
+def decision_boundary(
+    ax: Axes,
+    model: Any,
+    df: pl.DataFrame,
+    *,
+    x: str,
+    y: str,
+    target: str | None = None,
+    resolution: int = 150,
+    soft: bool = False,
+) -> None:
+    """Predicted regions over the (x, y) feature plane with the data scattered on top.
+
+    The class-separation picture for any predict-capable estimator: KNN neighbourhoods, tree
+    tiles, logistic lines, SVM curves — also k-means regions (pass ``target=None``) and a
+    regressor's prediction surface. Features beyond x/y are pinned at their median (numeric) or
+    mode, so with more than two features this is a *slice* through a typical row, not the whole
+    story. ``soft=True`` shades P(positive class) for binary classifiers instead of hard
+    regions — the honest view near the boundary. resolution² predictions run inside the chart;
+    keep it modest.
+    """
+    from matplotlib.colors import ListedColormap
+
+    xs = df[x].to_numpy()
+    ys = df[y].to_numpy()
+    pad_x = 0.05 * (float(xs.max() - xs.min()) or 1.0)
+    pad_y = 0.05 * (float(ys.max() - ys.min()) or 1.0)
+    grid_x = np.linspace(xs.min() - pad_x, xs.max() + pad_x, resolution)
+    grid_y = np.linspace(ys.min() - pad_y, ys.max() + pad_y, resolution)
+    mesh_x, mesh_y = np.meshgrid(grid_x, grid_y)
+
+    feature_columns = [column for column in df.columns if column != target]
+    n_points = resolution * resolution
+    columns: dict[str, Any] = {}
+    for column in feature_columns:
+        if column == x:
+            columns[column] = mesh_x.ravel()
+        elif column == y:
+            columns[column] = mesh_y.ravel()
+        elif df.schema[column].is_numeric():
+            median = df[column].median()
+            columns[column] = np.full(
+                n_points, float(median) if isinstance(median, int | float) else 0.0
+            )
+        else:
+            columns[column] = np.full(n_points, df[column].mode()[0], dtype=object)
+    grid_frame = pl.DataFrame(columns).select(feature_columns).to_pandas()
+
+    if soft:
+        probability = np.asarray(model.predict_proba(grid_frame))[:, 1]
+        filled = ax.contourf(
+            mesh_x,
+            mesh_y,
+            probability.reshape(resolution, resolution),
+            levels=np.linspace(0.0, 1.0, 21),
+            cmap="RdBu_r",
+            alpha=0.55,
+        )
+        ax.figure.colorbar(filled, ax=ax, label="P(positive class)")
+    else:
+        raw = np.asarray(model.predict(grid_frame))
+        classes, codes = np.unique(raw, return_inverse=True)
+        if raw.dtype.kind == "f" and classes.size > 12:  # a regressor's surface
+            surface = ax.contourf(
+                mesh_x,
+                mesh_y,
+                raw.reshape(resolution, resolution),
+                levels=20,
+                cmap="viridis",
+                alpha=0.6,
+            )
+            ax.figure.colorbar(surface, ax=ax, label="prediction")
+        else:
+            region_colors = ListedColormap(sns.color_palette(n_colors=classes.size))
+            ax.contourf(
+                mesh_x,
+                mesh_y,
+                codes.reshape(resolution, resolution),
+                levels=np.arange(classes.size + 1) - 0.5,
+                cmap=region_colors,
+                alpha=0.3,
+            )
+
+    if target is not None:
+        sns.scatterplot(data=df.to_pandas(), x=x, y=y, hue=target, ax=ax, s=25, edgecolor="white")
+    else:
+        ax.scatter(xs, ys, s=18, color="#444444", alpha=0.6)
+    ax.set(xlabel=x, ylabel=y)
+
+
+@chart(title="Decision tree")
+def tree_diagram(
+    ax: Axes,
+    model: Any,
+    *,
+    feature_names: Sequence[str] | None = None,
+    class_names: Sequence[str] | None = None,
+    max_depth: int | None = 3,
+) -> None:
+    """The fitted tree's actual rules, drawn — splits, thresholds, and leaf outcomes.
+
+    Interpretability you can hand to a domain expert: every path is a readable business rule.
+    Unwraps ``train.fit`` pipelines automatically; for an ensemble pass one member
+    (``forest.estimators_[0]``) and remember it is one vote of many. ``max_depth`` trims the
+    drawing, not the model — deep trees are unreadable, which is itself a finding.
+    """
+    from sklearn.tree import plot_tree
+
+    estimator = model.named_steps["model"] if hasattr(model, "named_steps") else model
+    plot_tree(
+        estimator,
+        ax=ax,
+        feature_names=list(feature_names) if feature_names is not None else None,
+        class_names=[str(name) for name in class_names] if class_names is not None else None,
+        max_depth=max_depth,
+        filled=True,
+        rounded=True,
+        impurity=False,
+        fontsize=9,
+    )

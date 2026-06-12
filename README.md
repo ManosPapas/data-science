@@ -43,7 +43,7 @@ type-hinted, tested, and importable in one line from notebooks (`from core.prelu
 | **Decide** | `decision` | contextual bandits (ε-greedy, Thompson, UCB1, LinUCB) · optimization (LP + shadow prices, MILP/knapsack, nonlinear, assignment, portfolio, Pareto fronts, stochastic/robust) · Monte Carlo `simulate` (correlated inputs, stress tests, paths) · `inventory` (newsvendor/EOQ/safety stock) · `capacity` (Erlang C) · `game` (Nash, best-response dynamics) |
 | **Price** | `pricing` | elasticity with CIs, cross-price & segment elasticity, drift monitoring · demand curves, willingness-to-pay, Van Westendorp · market equilibrium, censored-demand unconstraining, saturation, HHI · optimal/markup prices, marginal economics, dynamic-pricing DP |
 | **Measure** | `kpi` | ~30 financial KPIs, ~28 behaviour KPIs, and cost-sensitive `profit` curves |
-| **Visualize** | `viz` | a `@chart` decorator + theme + grid; static charts for EDA, models, clustering, explainability, time series — plus **interactive Plotly** charts (`viz.interactive`) |
+| **Visualize** | `viz` | a `@chart` decorator + theme + grid; static charts for EDA (incl. distribution-fit overlays), models, clustering, explainability, time series & survival curves, **decision science** (tornado, waterfall, uncertainty fans, control charts, Pareto frontiers, pricing) and **networks** — plus **interactive Plotly** charts (`viz.interactive`) |
 | **Utilities** | `utils` | memory profiling, structured logging, HTML reports |
 
 See the runnable [example notebooks](#example-notebooks) for these in action end-to-end.

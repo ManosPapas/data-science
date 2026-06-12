@@ -48,7 +48,10 @@ House conventions:
 |---|---|---|
 | `normality_test(x, method=)` | Before t-tests/ANOVA, on residuals | H0: sample is normal. `shapiro` (best power < ~5k rows), `dagostino` (skew+kurtosis based, large n), `ks` (Lilliefors-corrected KS — plain KS would be anticonservative with estimated mean/std). Small p → go non-parametric or transform |
 | `fit_distribution(x, dist)` | You need a parametric model of a metric (revenue, delays, demand) | Maximum-likelihood fit of any scipy distribution; returns `params` (shape..., loc, scale), log-likelihood, AIC, and a KS goodness-of-fit p. MLE = the parameter values that make the observed data most probable |
-| `best_distribution(x, candidates=)` | Which family fits best? | MLE-fits each candidate, ranked by AIC (lower = better fit after complexity penalty); check the winner's `ks_p` too — best-of-bad is still bad |
+| `best_distribution(x, candidates=)` | Which family fits best? | MLE-fits each candidate, ranked by AIC (lower = better fit after complexity penalty); incompatible candidates are skipped. Defaults span the commercial staples (norm, lognorm, expon, gamma, weibull_min, pareto, t) and *any* scipy continuous name can be added ('beta', 'genextreme', ...). Check the winner's `ks_p` too — best-of-bad is still bad |
+| `fit_discrete(x, dist, trials=)` | Count data (orders, claims, tickets) | MLE for the discrete families scipy can't `.fit`: `poisson` (variance = mean), `geometric` (trials until first success, support ≥ 1), `nbinom` (overdispersed counts — usually the right one), `binom` (successes out of known `trials`), `zip` (zero-inflated Poisson — never-buyers mixed with buyers; estimates the structural-zero share directly). Params plug into `scipy.stats.<dist>(**params)`; eyeball with `viz.eda.fit_overlay` |
+| `best_discrete(x, candidates=)` | Which count model? | Ranks the discrete fits by AIC; geometric drops out automatically when zeros are present. Poisson vs nbinom vs zip decides whether forecasts carry the real variance and the real zero mass |
+| `dispersion_check(x)` | Before any Poisson assumption | Variance/mean ratio + the Poisson dispersion test ((n−1)s²/x̄ ~ chi²). Overdispersed (ratio > 1, small p) → negative binomial, or intervals come out too narrow and stock-outs too frequent |
 | `outlier_bounds(x, method=, factor=)` | Flagging univariate outliers | Cut-offs via IQR fences (robust, default 1.5×IQR) or z-score (mean ± k·std — itself distorted by the outliers). Treat with `clean.winsorize`, transforms, or removal only for genuine errors |
 
 ### Hypothesis tests (two or more samples)
@@ -156,6 +159,7 @@ after). Conjugate pairs make the update closed-form; MCMC samples it when nothin
 | Function | Use when | What it tells you |
 |---|---|---|
 | `beta_posterior(successes, trials, prior=)` | One rate, with honest uncertainty | Conjugate Beta-Binomial update: Beta(a, b) + s/n → Beta(a+s, b+n−s). The interval is *credible* — "the rate is in here with 95% probability". The prior is explicit: Beta(1, 1) = uniform; larger a+b = stronger belief (mean a/(a+b)) for thin data |
+| `gamma_posterior(events, exposure, prior=)` | One *rate* per unit exposure (arrivals, defects, claims) | Conjugate Gamma-Poisson update: Gamma(a, b) + k events over exposure t → Gamma(a+k, b+t), mean (a+k)/(b+t). The Poisson sibling of `beta_posterior` for when "successes out of trials" doesn't fit; prior reads as a pseudo-events over b pseudo-exposure |
 | `hierarchical_rates(successes, trials, labels=)` | Many small rates (per store / SKU / campaign) | Hierarchical model via empirical Bayes: fits one shared Beta prior, then partially pools — small-n groups shrink hard toward the global mean, big-n barely move. Rank league tables on `shrunk_rate`, not raw rates |
 | `mcmc_sample(log_density, start, step=)` | No conjugate form for your posterior | Random-walk Metropolis: feed any log-density (log-prior + log-likelihood), get posterior draws + acceptance rate. Summarize with means / `np.quantile` credible intervals; tune `step` to ~20-40% acceptance, eyeball the trace. For big models use a dedicated PPL |
 
@@ -722,6 +726,7 @@ All `@chart` functions: pass prepared data, get an `Axes` (multi-panel ones retu
 | `eda.boxplot_by` / `eda.scatter` / `eda.pairplot` | Group spreads/outliers; pairwise relationships |
 | `eda.correlation_heatmap` / `eda.crosstab_heatmap` | Collinearity clusters; categorical association |
 | `eda.missingness_bar` | Null share per column |
+| `eda.fit_overlay` | Histogram + fitted distribution (pdf or pmf) — the eyeball check on `fit_distribution` / `fit_discrete`; a good AIC with a visibly wrong tail is what it catches |
 | `model.roc` | Ranking quality across all thresholds (AUC) — flattering under imbalance |
 | `model.precision_recall` | Same, focused on the positive class — the imbalance-honest curve (AP) |
 | `model.threshold_curve` | Precision/recall/F1 vs cut-off → choose the operating point |
@@ -736,6 +741,8 @@ All `@chart` functions: pass prepared data, get an `Axes` (multi-panel ones retu
 | `model.learning_curve` / `model.validation_curve` | Bias-variance read (compute: `evaluate.learning_curve_scores` / `validation_curve_scores`) |
 | `model.feature_selection_curve` | Score vs #features, peak marked (compute: `evaluate.rfecv_scores`) |
 | `model.model_comparison` | Per-fold score boxes — overlap = no real difference |
+| `model.decision_boundary` | Predicted regions over a 2-feature plane with the data on top: KNN neighbourhoods, tree tiles, logistic lines, SVM curves; k-means regions (no target) and regression surfaces too. `soft=True` shades P(class) — the honest view near the boundary. With >2 features it's a slice at the median row |
+| `model.tree_diagram` | The fitted tree's actual split rules drawn (sklearn plot_tree) — interpretability you can hand a domain expert; unwraps `train.fit` pipelines, pass `forest.estimators_[0]` for one ensemble member |
 | `cluster.explained_variance` | PCA components worth keeping |
 | `cluster.elbow` / `cluster.silhouette` / `cluster.silhouette_plot` | Choosing k; per-sample cohesion |
 | `cluster.cluster_scatter` / `cluster.dendrogram` | Segments in 2-D (PCA/t-SNE coords); merge hierarchy |
@@ -747,6 +754,17 @@ All `@chart` functions: pass prepared data, get an `Axes` (multi-panel ones retu
 | `timeseries.lag_plot` / `timeseries.seasonal_subseries` | Lag dependence; seasonal profile consistency |
 | `timeseries.seasonal_decomposition` | Trend / seasonal / residual split |
 | `timeseries.forecast` / `timeseries.forecast_residuals` | Forecast vs actual with interval band; residual whiteness over time (test: `diagnostics.ljung_box`) |
+| `timeseries.survival_curve` | Kaplan-Meier step curve(s) with CI bands, `{label: frame}` overlays segments — retention compared the censoring-correct way |
+| `decision.tornado` | `scenario.sensitivity` as the tornado: biggest lever on top, bars spanning low→high outcome, base line as the pivot |
+| `decision.waterfall` | The finance bridge: named contributions as floating bars (`change_decomposition`, summed `price_volume_mix`), gains/losses coloured apart, closing total |
+| `decision.fan` | Shaded quantile bands + center line — one chart for `path_percentiles` fans, rolling-elasticity CIs, conformal intervals |
+| `decision.control_chart` | `monitor.ewma_alerts` drawn: raw points, EWMA vs widening limits, alerts highlighted — the early-warning picture |
+| `decision.pareto_frontier` | Options scattered, the efficient set traced and labelled — the trade-off menu from `optimize.pareto_front` |
+| `decision.outcome_distribution` | Monte Carlo outcomes annotated with P10/P50/P90 and target lines — the deck version of a histogram |
+| `decision.price_curves` | Revenue/profit (any response) vs price with the recommended optimum marked |
+| `decision.van_westendorp` | The four survey curves with the crossing points (optimal / range bounds) marked |
+| `decision.price_policy` | Dynamic-pricing policy heatmap (period × remaining stock → price): markdown toward the deadline, scarcity premium toward the stock-out corner |
+| `network.network` | Edge list as a force-directed graph (no networkx): node size = degree, edge width = weight; hubs central, communities clustered. Qualitative — read exact structure off `analytics.graph` tables; filter big edge lists first |
 | `conceptual.dag(edges)` | Causal DAG from (cause, effect) pairs — pick the adjustment set: block backdoor paths (confounders), don't condition on colliders or mediators |
 | `conceptual.gini_vs_entropy` / `conceptual.bias_variance` | Teaching sketches (impurity criteria, error decomposition) — functions of a parameter, not data |
 
@@ -768,9 +786,11 @@ All `@chart` functions: pass prepared data, get an `Axes` (multi-panel ones retu
 | Bayes' theorem | `stats.bayes_rule` — the arithmetic behind all of `analytics.bayes` and `experiment.bayes_*` |
 | Bootstrapping | `stats.bootstrap_ci` (BCa resampling CI for any statistic) |
 | Permutation testing | `stats.permutation_test` (shuffle-based, assumption-free significance) |
-| Likelihood & MLE | `stats.fit_distribution` / `best_distribution` |
+| Likelihood & MLE | `stats.fit_distribution` / `best_distribution` (continuous); `fit_discrete` / `best_discrete` (counts); visual check via `viz.eda.fit_overlay` |
+| Count distributions & overdispersion (Poisson / geometric / negative binomial / binomial / zero-inflated) | `stats.fit_discrete` / `best_discrete` / `dispersion_check`; regression side via `glm_fit(family="poisson")` and registry `poisson`/`tweedie` |
+| Decision boundaries / class separation (KNN, trees, SVM, k-means) | `viz.model.decision_boundary` (hard regions or `soft=True` probability shading); the tree's rules via `viz.model.tree_diagram` |
 | Bayesian vs frequentist | `experiment.bayes_conversions` / `bayes_means` vs `analyze_*`; `analytics.bayes`; `ThompsonSampling` |
-| Prior / posterior / conjugate priors / credible intervals | `bayes.beta_posterior` (Beta-Binomial conjugacy spelled out); credible intervals also in `experiment.bayes_*` |
+| Prior / posterior / conjugate priors / credible intervals | `bayes.beta_posterior` (Beta-Binomial) and `bayes.gamma_posterior` (Gamma-Poisson, for rates); credible intervals also in `experiment.bayes_*` |
 | MCMC | `bayes.mcmc_sample` (random-walk Metropolis) |
 | Hierarchical models | `bayes.hierarchical_rates` (empirical-Bayes shrinkage); `regression.mixed_effects` (random intercepts) |
 | Decision trees & overfitting | `registry.make_model("tree", max_depth=, min_samples_leaf=)`; ensembles |

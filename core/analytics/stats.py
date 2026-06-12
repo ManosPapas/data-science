@@ -295,10 +295,31 @@ def fit_distribution(data: Floats, dist: str = "norm") -> dict[str, Any]:
 
 def best_distribution(
     data: Floats,
-    candidates: Sequence[str] = ("norm", "lognorm", "expon", "gamma", "weibull_min"),
+    candidates: Sequence[str] = (
+        "norm",
+        "lognorm",
+        "expon",
+        "gamma",
+        "weibull_min",
+        "pareto",
+        "t",
+    ),
 ) -> pl.DataFrame:
-    """MLE-fit each candidate distribution and rank by AIC (best first)."""
-    fits = [fit_distribution(data, dist) for dist in candidates]
+    """MLE-fit each candidate distribution and rank by AIC (best first); failures are skipped.
+
+    Any scipy *continuous* name can be a candidate ('beta', 'genextreme', 'triang', ...); the
+    defaults cover the commercial staples — normal, the right-skew family (lognormal / gamma /
+    Weibull / exponential), heavy tails (Pareto), and heavy-tailed-symmetric (Student t).
+    Count data belongs in :func:`best_discrete` instead.
+    """
+    fits = []
+    for dist in candidates:
+        try:
+            fits.append(fit_distribution(data, dist))
+        except (AttributeError, NotImplementedError, RuntimeError, ValueError):
+            continue  # not a fittable continuous distribution, or the fit blew up on this data
+    if not fits:
+        raise ValueError("no candidate distribution could be fitted to this data")
     return pl.DataFrame([{k: v for k, v in f.items() if k != "params"} for f in fits]).sort("aic")
 
 
@@ -585,3 +606,158 @@ def compare_groups(df: pl.DataFrame, value: str, group: str) -> dict[str, Any]:
         "p_value": result.p_value,
         "effect_size": effect,
     }
+
+
+def fit_discrete(
+    data: ArrayLike, dist: str = "poisson", *, trials: int | None = None
+) -> dict[str, Any]:
+    """MLE for count distributions: 'poisson', 'geometric', 'nbinom', 'binom', or 'zip'.
+
+    The discrete counterpart of :func:`fit_distribution` (scipy has no ``.fit`` for these):
+    orders per customer, claims per policy, contacts-until-conversion. Conventions: Poisson,
+    negative binomial, and zero-inflated Poisson ('zip') count occurrences (support 0, 1, ...);
+    geometric is trials *until* the first success (support 1, 2, ...) — shift failure-counts by
+    one or use nbinom; 'binom' is successes out of a *known* ``trials`` per observation. Poisson
+    forces variance = mean — run :func:`dispersion_check` first and reach for nbinom when counts
+    are overdispersed (they usually are); reach for 'zip' when zeros outnumber what even nbinom
+    explains (never-buyers mixed in with buyers — it estimates that structural-zero share ``pi``
+    directly). ``params`` plug into ``scipy.stats.<dist>(**params)`` ('zip' has no scipy twin,
+    but ``viz.eda.fit_overlay`` still draws it); compare candidates with :func:`best_discrete`.
+    """
+    x = np.asarray(data, dtype=float)
+    if x.size == 0 or np.any(x < 0) or np.any(x != np.round(x)):
+        raise ValueError("count data must be non-negative integers")
+    mean = float(x.mean())
+
+    if dist == "poisson":
+        params: dict[str, float] = {"mu": mean}
+        estimated = 1
+        loglik = float(np.sum(stats.poisson.logpmf(x, **params)))
+    elif dist == "geometric":
+        if np.any(x < 1):
+            raise ValueError(
+                "geometric counts trials until success (support 1, 2, ...) — "
+                "shift failure-counts by one or fit nbinom"
+            )
+        params = {"p": 1.0 / mean}
+        estimated = 1
+        loglik = float(np.sum(stats.geom.logpmf(x, **params)))
+    elif dist == "nbinom":
+        variance = float(x.var(ddof=1)) if x.size > 1 else mean
+
+        def negative_log_likelihood(log_n: float) -> float:
+            n = float(np.exp(log_n))
+            p = n / (n + mean)  # p implied by matching the mean for a given size n
+            return -float(np.sum(stats.nbinom.logpmf(x, n, p)))
+
+        from scipy.optimize import minimize_scalar
+
+        start = mean**2 / (variance - mean) if variance > mean else 10.0
+        result = minimize_scalar(
+            negative_log_likelihood,
+            bracket=(np.log(max(start, 1e-3)) - 2.0, np.log(max(start, 1e-3)) + 2.0),
+        )
+        n_hat = float(np.exp(result.x))
+        params = {"n": n_hat, "p": n_hat / (n_hat + mean)}
+        estimated = 2
+        loglik = float(np.sum(stats.nbinom.logpmf(x, **params)))
+    elif dist == "binom":
+        if trials is None:
+            raise ValueError("'binom' needs trials= — the known number of attempts per row")
+        if np.any(x > trials):
+            raise ValueError("counts exceed trials")
+        params = {"n": float(trials), "p": mean / trials}
+        estimated = 1  # n is known, only p is estimated
+        loglik = float(np.sum(stats.binom.logpmf(x, **params)))
+    elif dist == "zip":
+        positive = x[x > 0]
+        if positive.size == 0:
+            raise ValueError("all-zero sample — the Poisson rate of 'zip' is unidentified")
+        from scipy.optimize import minimize
+
+        n_zero = int(np.sum(x == 0))
+
+        def zip_negative_log_likelihood(theta: NDArray[np.float64]) -> float:
+            pi = 1.0 / (1.0 + np.exp(-theta[0]))
+            mu = float(np.exp(theta[1]))
+            ll_zero = n_zero * np.log(pi + (1.0 - pi) * np.exp(-mu)) if n_zero else 0.0
+            ll_positive = float(np.sum(np.log1p(-pi) + stats.poisson.logpmf(positive, mu)))
+            return -float(ll_zero + ll_positive)
+
+        mu_start = float(positive.mean())
+        poisson_zero = float(np.exp(-mu_start))
+        pi_start = float(
+            np.clip((n_zero / x.size - poisson_zero) / max(1.0 - poisson_zero, 1e-9), 0.02, 0.95)
+        )
+        theta0 = np.array([np.log(pi_start / (1.0 - pi_start)), np.log(mu_start)])
+        fit = minimize(zip_negative_log_likelihood, theta0, method="Nelder-Mead")
+        params = {
+            "pi": float(1.0 / (1.0 + np.exp(-fit.x[0]))),
+            "mu": float(np.exp(fit.x[1])),
+        }
+        estimated = 2
+        loglik = -float(fit.fun)
+    else:
+        raise ValueError("dist must be 'poisson', 'geometric', 'nbinom', 'binom', or 'zip'")
+
+    return {
+        "dist": dist,
+        "params": {key: float(value) for key, value in params.items()},
+        "loglik": loglik,
+        "aic": 2.0 * estimated - 2.0 * loglik,
+    }
+
+
+def best_discrete(
+    data: ArrayLike, candidates: Sequence[str] = ("poisson", "geometric", "nbinom", "zip")
+) -> pl.DataFrame:
+    """MLE-fit each discrete candidate and rank by AIC (best first); incompatible ones skipped.
+
+    Poisson vs nbinom vs zip is the call that matters commercially — it decides whether your
+    count forecasts carry the real variance and the real zero mass. Geometric drops out
+    automatically when the data contain zeros; 'binom' isn't a default because it needs the
+    known ``trials`` (fit it directly with :func:`fit_discrete`).
+    """
+    fits = []
+    for dist in candidates:
+        try:
+            fits.append(fit_discrete(data, dist))
+        except ValueError:
+            continue
+    if not fits:
+        raise ValueError("no candidate distribution is compatible with the data")
+    return pl.DataFrame([{k: v for k, v in fit.items() if k != "params"} for fit in fits]).sort(
+        "aic"
+    )
+
+
+@dataclass(frozen=True)
+class DispersionCheck:
+    """Variance-to-mean ratio for counts with the Poisson dispersion test verdict."""
+
+    ratio: float
+    statistic: float
+    p_value: float
+    overdispersed: bool
+
+
+def dispersion_check(data: ArrayLike, *, alpha: float = 0.05) -> DispersionCheck:
+    """Are counts overdispersed (variance > mean)? The Poisson-or-not gate for count models.
+
+    Poisson hard-codes variance = mean; real commercial counts (orders, claims, tickets) almost
+    always spread wider — customer heterogeneity inflates the variance. Test: (n-1)·s²/x̄ ~
+    chi²(n-1) under Poisson; a small ``p_value`` with ``ratio`` > 1 says use negative binomial
+    (``fit_discrete(x, "nbinom")``, ``glm_fit`` alternatives) or your intervals will be too
+    narrow and your stock-outs too frequent.
+    """
+    x = np.asarray(data, dtype=float)
+    if x.size < 2:
+        raise ValueError("need at least 2 observations")
+    mean = float(x.mean())
+    if mean <= 0:
+        raise ValueError("dispersion is undefined for an all-zero sample")
+    variance = float(x.var(ddof=1))
+    statistic = (x.size - 1) * variance / mean
+    p_value = float(stats.chi2.sf(statistic, x.size - 1))
+    ratio = variance / mean
+    return DispersionCheck(ratio, float(statistic), p_value, ratio > 1.0 and p_value < alpha)

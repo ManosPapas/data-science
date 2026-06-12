@@ -6,7 +6,7 @@ DataFrame charts take a ``pl.DataFrame`` + column names; sample charts take a 1-
 
 from __future__ import annotations
 
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 from typing import cast
 
 import numpy as np
@@ -127,3 +127,51 @@ def pairplot(
         chosen = [*chosen, hue]
     grid = sns.pairplot(pdf if chosen is None else pdf[chosen], hue=hue)
     return cast(Figure, grid.figure)
+
+
+@chart(title="Fitted distribution")
+def fit_overlay(
+    ax: Axes,
+    sample: ArrayLike,
+    *,
+    dist: str,
+    params: Sequence[float] | Mapping[str, float],
+) -> None:
+    """Histogram with a fitted distribution overlaid — the eyeball check on an MLE fit.
+
+    Continuous fits pass the ``params`` tuple from ``stats.fit_distribution`` (scipy order);
+    discrete fits pass the ``params`` mapping from ``stats.fit_discrete`` (including ``'zip'``,
+    which has no scipy twin). A good AIC with a visibly wrong tail is exactly what this chart
+    exists to catch.
+    """
+    import scipy.stats as sps
+
+    values = np.asarray(sample, dtype=float)
+    if dist == "zip":  # zero-inflated Poisson — drawn from its mixture pmf directly
+        if not isinstance(params, Mapping):
+            raise ValueError("'zip' params come as the mapping from stats.fit_discrete")
+        pi, mu = float(params["pi"]), float(params["mu"])
+        observed, counts = np.unique(values.astype(int), return_counts=True)
+        grid = np.arange(observed.min(), observed.max() + 1)
+        pmf = np.where(
+            grid == 0, pi + (1.0 - pi) * np.exp(-mu), (1.0 - pi) * sps.poisson.pmf(grid, mu)
+        )
+        ax.bar(observed, counts / values.size, width=0.8, alpha=0.45, label="observed")
+        ax.plot(grid, pmf, "o-", color="#1a1a1a", label="zip fit")
+        ax.set(xlabel="count", ylabel="probability")
+        ax.legend()
+        return
+    model = getattr(sps, dist)
+    frozen = model(**params) if isinstance(params, Mapping) else model(*params)
+    if hasattr(frozen.dist, "pmf"):  # discrete: observed shares vs fitted pmf
+        observed, counts = np.unique(values.astype(int), return_counts=True)
+        grid = np.arange(observed.min(), observed.max() + 1)
+        ax.bar(observed, counts / values.size, width=0.8, alpha=0.45, label="observed")
+        ax.plot(grid, frozen.pmf(grid), "o-", color="#1a1a1a", label=f"{dist} fit")
+        ax.set(xlabel="count", ylabel="probability")
+    else:
+        sns.histplot(x=values, stat="density", bins=40, alpha=0.45, ax=ax)
+        grid = np.linspace(values.min(), values.max(), 300)
+        ax.plot(grid, frozen.pdf(grid), color="#1a1a1a", label=f"{dist} fit")
+        ax.set(xlabel="value", ylabel="density")
+    ax.legend()

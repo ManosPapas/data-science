@@ -112,3 +112,101 @@ def test_missingness_dependence_separates_mar_from_mcar(rng: np.random.Generator
     out = stats.missingness_dependence(df, "v")
     assert out.filter(pl.col("column") == "driver")["p_value"][0] < 0.001  # MAR on driver
     assert out.filter(pl.col("column") == "noise")["p_value"][0] > 0.05  # unrelated
+
+
+def test_fit_discrete_recovers_parameters(rng: np.random.Generator) -> None:
+    from core.analytics import stats
+
+    poisson_fit = stats.fit_discrete(rng.poisson(4.0, 4000), "poisson")
+    assert abs(poisson_fit["params"]["mu"] - 4.0) < 0.15
+
+    geometric_fit = stats.fit_discrete(rng.geometric(0.3, 4000), "geometric")
+    assert abs(geometric_fit["params"]["p"] - 0.3) < 0.02
+
+    nbinom_fit = stats.fit_discrete(rng.negative_binomial(5, 0.4, 4000), "nbinom")
+    assert abs(nbinom_fit["params"]["n"] - 5.0) < 1.0
+    assert abs(nbinom_fit["params"]["p"] - 0.4) < 0.05
+
+
+def test_fit_discrete_validations(rng: np.random.Generator) -> None:
+    import pytest
+
+    from core.analytics import stats
+
+    with pytest.raises(ValueError, match="non-negative integers"):
+        stats.fit_discrete([1.5, 2.0], "poisson")
+    with pytest.raises(ValueError, match="trials until success"):
+        stats.fit_discrete([0, 1, 2], "geometric")
+    with pytest.raises(ValueError, match="poisson"):
+        stats.fit_discrete([1, 2], "zipf")
+
+
+def test_best_discrete_prefers_nbinom_for_overdispersed(rng: np.random.Generator) -> None:
+    from core.analytics import stats
+
+    overdispersed = rng.negative_binomial(2, 0.2, 3000)  # variance >> mean
+    ranked = stats.best_discrete(overdispersed)
+    assert ranked["dist"][0] == "nbinom"
+    assert "geometric" not in ranked["dist"].to_list()  # zeros knock geometric out
+
+    poisson_data = rng.poisson(3.0, 3000)
+    ranked_poisson = stats.best_discrete(poisson_data, candidates=("poisson", "nbinom"))
+    # nbinom nests poisson, so AICs are close — poisson must be within 2.5 of the winner
+    aic = dict(zip(ranked_poisson["dist"].to_list(), ranked_poisson["aic"].to_list(), strict=True))
+    assert aic["poisson"] - min(aic.values()) < 2.5
+
+
+def test_dispersion_check(rng: np.random.Generator) -> None:
+    from core.analytics import stats
+
+    poisson_counts = rng.poisson(4.0, 2000)
+    calm = stats.dispersion_check(poisson_counts)
+    assert not calm.overdispersed
+    assert abs(calm.ratio - 1.0) < 0.15
+
+    lumpy = rng.negative_binomial(2, 0.2, 2000)
+    wild = stats.dispersion_check(lumpy)
+    assert wild.overdispersed
+    assert wild.ratio > 2.0
+    assert wild.p_value < 0.001
+
+
+def test_gamma_posterior_updates_correctly() -> None:
+    import pytest
+
+    from core.analytics import bayes
+
+    posterior = bayes.gamma_posterior(30, 10.0)  # 30 events over 10 units of exposure
+    assert posterior.mean == pytest.approx(31.0 / 11.0)
+    assert posterior.lower < 3.0 < posterior.upper
+    strong_prior = bayes.gamma_posterior(0, 1.0, prior=(50.0, 10.0))
+    assert strong_prior.mean == pytest.approx(50.0 / 11.0)  # prior dominates thin data
+    with pytest.raises(ValueError, match="positive"):
+        bayes.gamma_posterior(5, 0.0)
+
+
+def test_fit_discrete_binom_and_zip(rng: np.random.Generator) -> None:
+    import pytest
+
+    from core.analytics import stats
+
+    binom_fit = stats.fit_discrete(rng.binomial(20, 0.35, 4000), "binom", trials=20)
+    assert abs(binom_fit["params"]["p"] - 0.35) < 0.02
+    with pytest.raises(ValueError, match="trials"):
+        stats.fit_discrete([1, 2], "binom")
+
+    structural_zero = rng.random(6000) < 0.3
+    zip_data = np.where(structural_zero, 0, rng.poisson(5.0, 6000))
+    zip_fit = stats.fit_discrete(zip_data, "zip")
+    assert abs(zip_fit["params"]["pi"] - 0.3) < 0.04
+    assert abs(zip_fit["params"]["mu"] - 5.0) < 0.25
+
+    ranked = stats.best_discrete(zip_data)
+    assert ranked["dist"][0] == "zip"  # the truth beats poisson/nbinom on AIC
+
+
+def test_best_distribution_skips_incompatible(rng: np.random.Generator) -> None:
+    from core.analytics import stats
+
+    ranked = stats.best_distribution(rng.normal(10.0, 2.0, 500), candidates=("norm", "poisson"))
+    assert ranked["dist"].to_list() == ["norm"]  # discrete name skipped, not fatal

@@ -123,3 +123,37 @@ def seasonal_decomposition(values: ArrayLike, *, period: int, model: str = "addi
     figure = cast(Figure, result.plot())
     figure.set_size_inches(10, 8)
     return figure
+
+
+@chart(title="Survival curve")
+def survival_curve(
+    ax: Axes,
+    curves: pl.DataFrame | dict[str, pl.DataFrame],
+    *,
+    time: str = "time",
+    survival: str = "survival",
+    ci_low: str = "ci_low",
+    ci_high: str = "ci_high",
+) -> None:
+    """Kaplan-Meier step curve(s) with CI bands; pass ``{label: frame}`` to compare segments.
+
+    Takes ``modeling.survival.kaplan_meier`` output. Survival is a step function (it drops at
+    event times and is flat between), so steps — not smooth lines — are the honest drawing.
+    """
+    groups = curves if isinstance(curves, dict) else {"": curves}
+    for label, frame in groups.items():
+        times = np.concatenate([[0.0], frame[time].to_numpy()])
+        values = np.concatenate([[1.0], frame[survival].to_numpy()])
+        (line,) = ax.step(times, values, where="post", label=label or None)
+        if ci_low in frame.columns and ci_high in frame.columns:
+            ax.fill_between(
+                frame[time].to_numpy(),
+                frame[ci_low].to_numpy(),
+                frame[ci_high].to_numpy(),
+                step="post",
+                alpha=0.15,
+                color=line.get_color(),
+            )
+    if len(groups) > 1:
+        ax.legend()
+    ax.set(xlabel="time", ylabel="survival probability", ylim=(0.0, 1.05))

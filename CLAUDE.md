@@ -131,8 +131,10 @@ core/        the package (flat layout at the repo root — no src/ wrapper)
                 (optimal/markup prices, marginal economics, dynamic-pricing DP)
   kpi/          business KPIs: financial (revenue/economy), behaviour (GA/marketing), profit (cost-sensitive)
   viz/          base.py = @chart decorator + theme + grid; static charts by group:
-                eda, model, cluster, explain, timeseries; plus interactive (Plotly,
-                @interactive_chart): interactive
+                eda (+ fit_overlay), model, cluster, explain, timeseries (+ survival_curve),
+                decision (tornado, waterfall, fan, control chart, Pareto frontier, outcome
+                distribution, price curves, Van Westendorp, policy heatmap), network
+                (force-directed graphs); plus interactive (Plotly, @interactive_chart)
   utils/        memory profiling, structured logging, HTML report
 tests/       pytest, mirrors core/
 ```
