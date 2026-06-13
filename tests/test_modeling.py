@@ -78,7 +78,7 @@ def test_leaderboard_ranks_models(rng: np.random.Generator) -> None:
     assert board.height == 2
     assert "accuracy_mean" in board.columns
     means = board["accuracy_mean"].to_list()
-    assert means == sorted(means, reverse=True)  # ranked best-first
+    assert means == sorted(means, reverse=True)
 
 
 def test_segment_clusterer_and_elbow(rng: np.random.Generator) -> None:
@@ -124,7 +124,7 @@ def test_learning_and_validation_curve_scores(rng: np.random.Generator) -> None:
     model = registry.make_model("logistic", task="classification", max_iter=200)
     sizes, train_scores, val_scores = evaluate.learning_curve_scores(model, x, y, cv=3)
     assert sizes.shape[0] == train_scores.shape[0] == val_scores.shape[0] == 5
-    assert train_scores.shape[1] == 3  # one column per fold
+    assert train_scores.shape[1] == 3  # one column per cv fold
     values, train_curve, val_curve = evaluate.validation_curve_scores(
         model, x, y, param_name="C", param_range=[0.01, 1.0, 100.0], cv=3
     )

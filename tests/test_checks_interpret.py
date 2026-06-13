@@ -80,8 +80,8 @@ def test_control_limits_and_ewma_alerts(rng: np.random.Generator) -> None:
     drifted = np.concatenate([stable, rng.normal(106.0, 5.0, 60)])  # ~1.2 sigma shift
     chart = monitor.ewma_alerts(drifted, baseline)
     alerts = chart["alert"].to_numpy()
-    assert not alerts[:20].any()  # the early stable stretch stays quiet
-    assert alerts[80:].any()  # the persistent small shift is caught
+    assert not alerts[:20].any()  # early stable stretch stays quiet
+    assert alerts[80:].any()  # persistent small shift is caught
     assert {"value", "ewma", "lower", "upper", "alert"} <= set(chart.columns)
 
 

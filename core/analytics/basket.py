@@ -33,8 +33,7 @@ def _frequent_levels(
 
     Returns one frame per size with at least one frequent set; empties stop the ladder early.
     """
-    # subtract a tiny epsilon so an itemset whose support is *exactly* min_support isn't dropped by
-    # float round-up (e.g. 0.07 * 100 == 7.000000000000001, which would fail `count >= threshold`)
+    # epsilon so a support of exactly min_support survives float round-up (0.07*100 = 7.0000...1)
     threshold = min_support * n_tx - 1e-9
     singles = (
         base.group_by(item)

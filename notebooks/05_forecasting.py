@@ -33,7 +33,7 @@ daily.head()
 timeseries.seasonal_decomposition(y, period=7)
 
 # %%
-# The stationarity verdict justifies the d=1 in the ARIMA order below; notebook 11 runs the full
+# Stationarity verdict justifies d=1 in the ARIMA order below; notebook 11 runs the full
 # diagnostic suite (trend, dominant period, change points, residual whiteness).
 print(diagnostics.stationarity_report(y)["verdict"])
 
@@ -121,8 +121,8 @@ timeseries.forecast(
 )
 
 # %%
-# Score the *band*, not just the point: pinball loss is the proper loss for a quantile, so the
-# 2.5%/97.5% bounds are graded as quantile forecasts (and coverage should sit near 95%).
+# Score the band, not just the point: pinball loss is the proper loss for a quantile, so the
+# 2.5%/97.5% bounds are graded as quantile forecasts (coverage should sit near 95%).
 coverage = float(np.mean((test_y >= lower) & (test_y <= upper)))
 lower_pinball = evaluate.pinball_loss(test_y, lower, alpha=0.025)
 upper_pinball = evaluate.pinball_loss(test_y, upper, alpha=0.975)

@@ -46,15 +46,14 @@ print(f"uniform prior : {flat.mean:.3f}  [{flat.lower:.3f}, {flat.upper:.3f}]")
 print(f"informed prior: {informed.mean:.3f}  [{informed.lower:.3f}, {informed.upper:.3f}]")
 
 # %%
-# Side by side with the frequentist Wilson interval on the same 18/120: numerically close here,
-# but only the credible interval licenses "the rate is in this range with 95% probability" —
-# and only the Bayesian version has a dial for prior knowledge.
+# Frequentist Wilson interval on the same 18/120: numerically close, but only the credible interval
+# licenses "the rate is in this range with 95% probability" and has a dial for prior knowledge.
 rate, wilson_lo, wilson_hi = stats.proportion_confidence_interval(18, 120)
 print(f"Wilson (frequentist): {rate:.3f}  [{wilson_lo:.3f}, {wilson_hi:.3f}]")
 
 # %%
-# Prior sensitivity — the report you attach when priors are debatable. With this much data the
-# posterior barely moves across a skeptic, a uniform, and an optimist: the data dominate.
+# Prior sensitivity — attach this when priors are debatable. With this much data the posterior
+# barely moves across skeptic, uniform, and optimist: the data dominate.
 for label, prior in [
     ("skeptic 10%", (4.0, 36.0)),
     ("uniform", (1.0, 1.0)),
@@ -85,7 +84,7 @@ print(f"expected loss if shipped {bayesian.expected_loss:.5f} (retention points 
 print(f"95% credible interval for the lift {bayesian.credible_interval}")
 
 # %%
-# Guardrail (spend) the same way — the posterior of each mean via the CLT-normal approximation.
+# Guardrail (spend) the same way — posterior of each mean via the CLT-normal approximation.
 spend_ctrl = ctrl["monthly_spend"].drop_nulls().to_numpy()
 spend_trt = trt["monthly_spend"].drop_nulls().to_numpy()
 guardrail = experiment.bayes_means(spend_ctrl, spend_trt)
@@ -115,16 +114,15 @@ league.with_columns((pl.col("rate") - pl.col("shrunk_rate")).abs().alias("moved"
 ).head(6)
 
 # %%
-# Raw vs shrunk ranking — the small-n cells move; the big retail cells barely budge.
+# Small-n cells move; the big retail cells barely budge.
 print("worst by raw rate   :", league.sort("rate", descending=True)["group"].head(3).to_list())
 print(
     "worst by shrunk rate:", league.sort("shrunk_rate", descending=True)["group"].head(3).to_list()
 )
 
 # %%
-# The shrinkage picture: every cell's raw rate vs its shrunk rate. Points off the diagonal are
-# being pulled toward the pooled mean — and the further out a raw rate sits, the harder it's
-# pulled (those are exactly the thin cells).
+# Every cell's raw rate vs shrunk rate. Points off the diagonal are pulled toward the pooled mean
+# — the further out (and thinner) the cell, the harder the pull.
 fig, axes = base.grid(1, ncols=1)
 eda.scatter(league, "rate", "shrunk_rate")
 
@@ -153,8 +151,8 @@ print(f"MCMC posterior  {samples[:, 0].mean():.4f}  [{mcmc_lo:.4f}, {mcmc_hi:.4f
 print(f"t interval      {t_mean:.4f}  [{t_lo:.4f}, {t_hi:.4f}]   (they should agree)")
 
 # %%
-# The posterior is a *distribution*, not a point — and the draws are ordinary data: histogram
-# them, quantile them, feed them into any downstream decision calculation.
+# The posterior is a distribution, not a point — the draws are ordinary data: histogram, quantile,
+# or feed them into any downstream decision calculation.
 fig, axes = base.grid(1, ncols=1)
 eda.histogram(samples[:, 0], ax=axes[0], title="Posterior of mean log-spend (MCMC draws)")
 

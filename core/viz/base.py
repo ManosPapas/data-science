@@ -110,8 +110,7 @@ def chart(
                 cast(Figure, ax.figure).savefig(save, bbox_inches="tight", dpi=150)
             return ax
 
-        # functools.wraps copies the draw signature, which hides the injected keywords (and shows
-        # ``ax`` as required) in Jupyter help — publish the real calling convention instead.
+        # functools.wraps hides the injected kwargs in Jupyter help; publish the real signature
         setattr(wrapper, "__signature__", _public_signature(draw, title))  # noqa: B010
         return wrapper
 

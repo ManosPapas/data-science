@@ -24,9 +24,8 @@ def _validate_loglog(
 ) -> tuple[NDArray[np.float64], NDArray[np.float64]]:
     p = np.asarray(price, dtype=float)
     q = np.asarray(quantity, dtype=float)
-    # NaN slips past `<= 0` (every comparison with NaN is False), so reject non-finite first —
-    # otherwise nulls flow into log/lstsq and raise a LinAlgError the segment/rolling loops,
-    # which only catch ValueError, would not survive.
+    # reject non-finite first: NaN slips past `<= 0`, then nulls hit lstsq as a LinAlgError that
+    # the segment/rolling loops (which catch only ValueError) wouldn't survive
     if not (np.all(np.isfinite(p)) and np.all(np.isfinite(q))):
         raise ValueError("log-log demand requires finite price and quantity (drop nulls/NaNs)")
     if np.any(p <= 0) or np.any(q <= 0):

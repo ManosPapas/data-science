@@ -61,8 +61,7 @@ print(f"curve verdict: {shape.verdict} (concave share {shape.concave_share:.0%})
 print("concave around the peak -> the interior optimum is trustworthy")
 
 # %%
-# Marginal revenue read straight off the sampled revenue curve: slope crosses zero at the
-# revenue (not profit) peak — and point elasticity recovers e at every price.
+# MR straight off the curve: slope crosses zero at the revenue (not profit) peak.
 revenue_curve = pricing.optimize.revenue_at(intercept, e, grid)
 marginal_from_curve = curves.slope(grid, revenue_curve)
 local_e = curves.point_elasticity(grid, revenue_curve)

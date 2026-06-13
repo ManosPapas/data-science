@@ -111,8 +111,7 @@ popularity_scores = dict(
     zip(popular["item"].to_list(), popular["interactions"].to_list(), strict=True)
 )
 
-# Group once into {order: [items]} lookups instead of filtering the frame per order (which is a
-# full scan each time — quadratic on real data). One pass, then dict access in the loop.
+# Group once into {order: [items]} lookups; per-order filtering would be quadratic.
 train_by_order = {
     row["order"]: row["item"]
     for row in train_set.group_by("order").agg("item").iter_rows(named=True)
@@ -169,7 +168,6 @@ hubs = graph.degree_centrality(edges, weight="weight")
 print(f"hub product: {hubs['node'][0]} (degree {hubs['degree'][0]:.0f})")
 
 # %%
-# The same structure, drawn: hubs central, the two communities visibly apart.
 network.network(
     edges,
     weight="weight",

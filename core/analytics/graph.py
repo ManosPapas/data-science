@@ -41,8 +41,7 @@ def _build(
     n = len(nodes)
     matrix = coo_matrix((weights, (rows, cols)), shape=(n, n)).tocsr()
     if not directed:
-        # Mirror with elementwise max, not sum: an edge listed in both directions (the common
-        # "both orientations exported" case) is one undirected edge, so its weight must not double.
+        # max, not sum: a both-orientations-exported edge is one undirected edge — don't double it
         matrix = matrix.maximum(matrix.T)
     return matrix, nodes
 
@@ -81,8 +80,7 @@ def degree_centrality(
             ((pl.col("in_degree") + pl.col("out_degree")) / max(n - 1, 1)).alias("centrality")
         )
         return frame.sort("centrality", descending=True)
-    # Symmetrized matrix counts each undirected edge in both triangles, so the row sum *is* the
-    # plain degree.
+    # symmetrized matrix counts each edge in both triangles, so the row sum is the plain degree
     return (
         pl.DataFrame(
             {"node": pl.Series(nodes), "degree": out_degree, "weighted_degree": out_weight}

@@ -68,7 +68,7 @@ def test_ols_reconciliation_is_coherent_and_balanced() -> None:
     coherent_input = hierarchy.reconcile(result, HIERARCHY, method="ols")
     for node, values in result.items():
         np.testing.assert_allclose(coherent_input[node], values, atol=1e-9)
-    # the gaps after reconciliation are zero
+    # gaps after reconciliation are zero
     gaps = hierarchy.coherence_error(result, HIERARCHY)
     assert gaps["mean_abs_gap"].max() == pytest.approx(0.0, abs=1e-9)
 

@@ -32,7 +32,7 @@ def test_cuped_reduces_variance_and_keeps_the_mean(rng: np.random.Generator) -> 
     metric = covariate * 0.8 + rng.normal(0.0, 5.0, 2000)
     adjusted = experiment.cuped_adjust(metric, covariate)
     assert adjusted.var() < metric.var() * 0.6  # strong covariate -> big variance cut
-    assert abs(adjusted.mean() - metric.mean()) < 1e-9  # the effect estimate is untouched
+    assert abs(adjusted.mean() - metric.mean()) < 1e-9  # effect estimate untouched
 
 
 def test_msprt_means_is_calm_under_null_and_fires_on_effect(rng: np.random.Generator) -> None:
@@ -84,7 +84,7 @@ def test_ipw_ate_corrects_observed_confounding(rng: np.random.Generator) -> None
     y = 1.0 * treated + 2.0 * x + rng.normal(0.0, 0.5, 4000)
     naive = float(y[treated == 1].mean() - y[treated == 0].mean())
     adjusted = causal.ipw_ate(y, treated, propensity)
-    assert abs(adjusted - 1.0) < abs(naive - 1.0)  # weighting removes most of the bias
+    assert abs(adjusted - 1.0) < abs(naive - 1.0)  # weighting removes most bias
     assert abs(adjusted - 1.0) < 0.3
 
 
@@ -187,7 +187,7 @@ def test_fixed_effects_absorbs_entity_confounding(rng: np.random.Generator) -> N
     within = regression.fixed_effects(df, y="y", x=["x"], entity="store").coefficients
     pooled_coef = pooled.filter(pl.col("term") == "x")["coef"][0]
     within_coef = within.filter(pl.col("term") == "x")["coef"][0]
-    assert abs(within_coef - 2.0) < 0.1  # demeaning recovers the true within effect
+    assert abs(within_coef - 2.0) < 0.1  # demeaning recovers the within effect
     assert abs(within_coef - 2.0) < abs(pooled_coef - 2.0)  # pooled OLS is confounded
 
 
@@ -215,7 +215,7 @@ def test_hierarchical_rates_shrinks_small_groups_hardest() -> None:
     big = frame.filter(pl.col("group") == "big")
     tiny_move = abs(tiny["shrunk_rate"][0] - tiny["rate"][0])
     big_move = abs(big["shrunk_rate"][0] - big["rate"][0])
-    assert tiny_move > big_move  # n=2 shrinks toward the pool, n=100 barely moves
+    assert tiny_move > big_move  # n=2 shrinks toward pool, n=100 barely moves
     assert prior[0] > 0 and prior[1] > 0
 
 
@@ -248,7 +248,7 @@ def test_synthetic_control_tracks_and_measures(rng: np.random.Generator) -> None
     result = causal.synthetic_control(
         donors_pre @ true_weights,
         donors_pre,
-        donors_post @ true_weights + 5.0,  # +5 lift after the intervention
+        donors_post @ true_weights + 5.0,  # +5 lift after intervention
         donors_post,
     )
     assert result.pre_rmse < 0.5

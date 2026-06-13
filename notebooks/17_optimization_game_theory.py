@@ -214,8 +214,7 @@ print("equilibrium payoff 6 vs cooperative 10 -> the €4m gap is the prize for 
 
 
 # %%
-# Continuous price war: each side's best reply to the other's price (reaction functions from
-# a linear-demand profit model). Best-response iteration settles where moves stop paying.
+# Continuous price war: reaction functions from a linear-demand profit model.
 def our_reply(prices: np.ndarray) -> float:
     return 40.0 + 0.45 * prices[1]
 

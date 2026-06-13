@@ -31,12 +31,12 @@ def test_point_biserial(rng: np.random.Generator) -> None:
 
 
 def test_cramers_v_and_phi() -> None:
-    # perfectly associated 2x2 → V and |phi| near 1
+    # perfectly associated 2x2 -> V and |phi| near 1
     a = [0, 0, 1, 1, 0, 1]
     b = [0, 0, 1, 1, 0, 1]
     assert stats.cramers_v(a, b, bias_correction=False) == pytest.approx(1.0, abs=1e-6)
     assert stats.phi_coefficient(a, b) == pytest.approx(1.0, abs=1e-6)
-    # independent → near 0
+    # independent -> near 0
     rng = np.random.default_rng(0)
     indep_a = rng.integers(0, 3, 2000)
     indep_b = rng.integers(0, 3, 2000)
@@ -55,7 +55,7 @@ def test_tetrachoric_recovers_latent_correlation(rng: np.random.Generator) -> No
         .to_numpy()
     )
     rho = stats.tetrachoric(table)
-    assert abs(rho - 0.6) < 0.07  # recovers the latent correlation, phi would understate it
+    assert abs(rho - 0.6) < 0.07  # recovers latent correlation; phi would understate it
 
 
 def test_partial_correlation_removes_confounder(rng: np.random.Generator) -> None:
@@ -89,7 +89,7 @@ def test_one_sample_t_test() -> None:
 
 
 def test_chi_square_gof() -> None:
-    observed = [30, 30, 30, 30]  # uniform → matches default
+    observed = [30, 30, 30, 30]  # uniform -> matches default
     assert stats.chi_square_gof(observed).p_value > 0.9
     skewed = [60, 20, 20, 20]
     assert stats.chi_square_gof(skewed).p_value < 0.01
@@ -137,7 +137,7 @@ def test_pairwise_and_mahalanobis(rng: np.random.Generator) -> None:
     matrix = distance.pairwise(pts, metric="euclidean")
     assert matrix.shape == (3, 3)
     assert matrix[0, 1] == pytest.approx(5.0)
-    # mahalanobis: a point far along the low-variance axis is "far" despite small raw distance
+    # mahalanobis: far along the low-variance axis despite small raw distance
     data = rng.multivariate_normal([0, 0], [[10.0, 0.0], [0.0, 0.1]], 2000)
     along_tight_axis = distance.mahalanobis([0.0, 2.0], data)
     along_wide_axis = distance.mahalanobis([2.0, 0.0], data)
@@ -167,7 +167,7 @@ def test_power_transformer_normalizes(rng: np.random.Generator) -> None:
 
 def test_curve_integration() -> None:
     x = np.linspace(0.0, 10.0, 1001)
-    assert curves.integrate(x, x) == pytest.approx(50.0, abs=0.01)  # ∫x dx 0..10 = 50
+    assert curves.integrate(x, x) == pytest.approx(50.0, abs=0.01)  # integral of x over 0..10 = 50
     assert curves.integrate(x, np.ones_like(x), method="simpson") == pytest.approx(10.0, abs=1e-6)
 
 
@@ -181,14 +181,14 @@ def test_durbin_wu_hausman_detects_endogeneity(rng: np.random.Generator) -> None
     result = regression.durbin_wu_hausman(
         df, y="y", endogenous="endog", exogenous=[], instruments=["z"]
     )
-    assert result.p_value < 0.01  # endogeneity detected → OLS biased, use IV
+    assert result.p_value < 0.01  # endogeneity detected -> OLS biased, use IV
 
 
 # --- Code-review fix regressions ----------------------------------------------------------------
 
 
 def test_tetrachoric_handles_degenerate_table() -> None:
-    # an almost-empty off-diagonal cell implies a near-±1 latent correlation: must clamp, not crash
+    # near-empty off-diagonal cell implies near +/-1 correlation: must clamp, not crash
     rho = stats.tetrachoric([[50, 0], [1, 49]])
     assert 0.9 < rho <= 1.0
     rho_neg = stats.tetrachoric([[0, 50], [49, 1]])
@@ -196,7 +196,7 @@ def test_tetrachoric_handles_degenerate_table() -> None:
 
 
 def test_classification_metrics_single_class_slice() -> None:
-    # an all-positive slice must not crash the score block (roc_auc is undefined there)
+    # all-positive slice must not crash the score block (roc_auc undefined there)
     metrics = evaluate.classification_metrics([1, 1, 1], [1, 1, 1], y_score=[0.6, 0.7, 0.8])
     assert "roc_auc" not in metrics  # skipped, not crashed
     assert metrics["accuracy"] == 1.0

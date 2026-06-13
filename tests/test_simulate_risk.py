@@ -42,7 +42,7 @@ def test_monte_carlo_correlation_couples_inputs() -> None:
     )
     observed = np.corrcoef(result.input_samples["a"], result.input_samples["b"])[0, 1]
     assert observed > 0.85
-    # correlated inputs widen the spread of the sum vs independence (sqrt(2) -> ~1.95 sigma)
+    # correlation widens the sum's spread vs independence (sqrt(2) -> ~1.95)
     assert result.std > 1.8
 
 

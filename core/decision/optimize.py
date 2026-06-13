@@ -51,8 +51,8 @@ def shadow_prices(
     constraint isn't binding (slack > 0). Pass the same ``maximize`` you solved with so signs
     read in objective units.
     """
-    # shadow price = d(objective as the user stated it)/d(b); linprog marginals are for the
-    # minimized problem, so a maximize solve flips the sign.
+    # shadow price = d(objective)/d(b); linprog marginals are for the minimized problem, so a
+    # maximize solve flips the sign
     sign = -1.0 if maximize else 1.0
     rows = []
     ub = getattr(result, "ineqlin", None)

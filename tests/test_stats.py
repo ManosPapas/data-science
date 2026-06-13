@@ -71,7 +71,7 @@ def test_permutation_test_detects_shift_and_stays_calm(rng: np.random.Generator)
 
 
 def test_simpsons_check_flags_a_reversal(rng: np.random.Generator) -> None:
-    # within each group y falls with x, but the high-x group sits at a higher level
+    # within group y falls with x, but the high-x group sits higher overall
     x_a = rng.uniform(0.0, 1.0, 200)
     x_b = rng.uniform(2.0, 3.0, 200)
     y_a = -1.0 * x_a + rng.normal(0.0, 0.05, 200)
@@ -151,7 +151,7 @@ def test_best_discrete_prefers_nbinom_for_overdispersed(rng: np.random.Generator
 
     poisson_data = rng.poisson(3.0, 3000)
     ranked_poisson = stats.best_discrete(poisson_data, candidates=("poisson", "nbinom"))
-    # nbinom nests poisson, so AICs are close — poisson must be within 2.5 of the winner
+    # nbinom nests poisson, so AICs are close - poisson within 2.5 of the winner
     aic = dict(zip(ranked_poisson["dist"].to_list(), ranked_poisson["aic"].to_list(), strict=True))
     assert aic["poisson"] - min(aic.values()) < 2.5
 
@@ -217,7 +217,7 @@ def test_best_discrete_survives_underdispersed(rng: np.random.Generator) -> None
 
     from core.analytics import stats
 
-    # equidispersed/underdispersed counts have no interior nbinom MLE — must not crash
+    # underdispersed counts have no interior nbinom MLE - must not crash
     constant_ish = np.full(500, 4) + rng.integers(0, 2, 500)  # variance << mean
     ranked = stats.best_discrete(constant_ish)
     assert ranked.height >= 1  # poisson/binom survive, nbinom is skipped cleanly

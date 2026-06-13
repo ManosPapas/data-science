@@ -54,9 +54,8 @@ eda.missingness_bar(raw, ax=axes[0], title="Missingness (%)")
 eda.count_bar(raw, "channel", ax=axes[1], title="Orders by channel")
 
 # %%
-# Before filling anything: is `unit_price` missing at random (MCAR), or does its absence depend on
-# other columns (MAR)? Large p-values everywhere = MCAR, so a simple median fill won't bias us;
-# small ones would call for conditional imputation (see notebook 07 and `preprocess.make_imputer`).
+# Is `unit_price` MCAR or MAR? Large p-values = MCAR, so a median fill won't bias; small ones
+# would need conditional imputation (notebook 07, `preprocess.make_imputer`).
 stats.missingness_dependence(
     raw.select(["unit_price", "units", "discount", "revenue", "segment", "region", "channel"]),
     "unit_price",
@@ -69,7 +68,7 @@ stats.missingness_dependence(
 # for memory.
 
 # %%
-# Text: " Retail", "RETAIL", "retail " all collapse to "retail"; flag gaps, then fill them.
+# " Retail", "RETAIL", "retail " all collapse to "retail"; flag gaps, then fill.
 clean_tx = (
     raw.pipe(clean.standardize_columns)
     .pipe(clean.clean_text, ["segment"], lower=True)
@@ -80,19 +79,19 @@ clean_tx = (
 clean_tx["segment"].value_counts(sort=True)
 
 # %%
-# Dtypes: string date -> Date, low-cardinality strings -> Categorical (inferred from content).
+# string date -> Date, low-cardinality strings -> Categorical (inferred from content).
 print("before:", raw.schema["order_date"], "|", raw.schema["segment"])
 typed = clean.auto_cast(clean_tx)
 print("after: ", typed.schema["order_date"], "|", typed.schema["segment"])
 typed.schema
 
 # %%
-# Duplicate order rows crept in during export — drop them on the business key.
+# Duplicate order rows crept in during export — drop on the business key.
 deduped = clean.drop_duplicate_rows(typed, subset=["order_id"])
 print(f"{typed.height} rows -> {deduped.height} after de-duplicating on order_id")
 
 # %%
-# Outliers: a few revenue values are wildly inflated. Quantify, then winsorize.
+# A few revenue values are wildly inflated — quantify, then winsorize.
 lo, hi = stats.outlier_bounds(deduped["revenue"].to_numpy(), method="iqr")
 above = int((deduped["revenue"] > hi).sum())
 print(f"IQR fence for revenue: [{lo:,.0f}, {hi:,.0f}] — {above} orders above the upper fence")
@@ -109,9 +108,9 @@ compact = clean.downcast(winsorized)
 print("\n" + memory_report(compact))
 
 # %%
-# Model-ready categoricals without one-hot explosion: frequency-encode `segment` (count as a
-# numeric feature) and lump the thinnest `channel` into "other" (rare levels carry too few rows
-# to estimate anything). Target encoding lives in `preprocess.make_encoder` (fit on train only).
+# Model-ready categoricals without one-hot explosion: frequency-encode `segment` and lump the
+# thinnest `channel` into "other" (rare levels carry too few rows). Target encoding lives in
+# `preprocess.make_encoder` (fit on train only).
 encoded = compact.pipe(transform.frequency_encode, ["segment"]).pipe(
     transform.group_rare, "channel", min_share=0.15
 )
@@ -132,7 +131,7 @@ problems = validate.check_schema(
 print("validation problems:", problems or "none")
 
 # %%
-# Persist the clean frame so the downstream notebooks reuse it (Parquet, not CSV).
+# Persist for downstream notebooks (Parquet, not CSV).
 clean_path = ROOT / "data" / "processed" / "transactions_clean.parquet"
 write_parquet(compact, clean_path)
 print(f"saved -> {clean_path}")
@@ -148,10 +147,9 @@ eda.histogram(compact["unit_price"].to_numpy(), ax=axes[1], title="Unit price")
 eda.ecdf(compact["revenue"].to_numpy(), ax=axes[2], title="Revenue ECDF")
 
 # %%
-# Two ways to tame the skew, in increasing order of reach. log(1+x) is the quick, stateless move
-# (`transform.log1p`). A *fitted* power transform (Yeo-Johnson / Box-Cox) learns the exponent that
-# makes the column as normal as possible — the principled upgrade when log isn't enough; being
-# fitted it belongs in `preprocess` (train-only). Compare the residual skew.
+# Two ways to tame skew. log1p is the quick stateless move; a fitted power transform
+# (Yeo-Johnson / Box-Cox) learns the exponent for max normality — the upgrade when log isn't
+# enough, and being fitted it belongs in `preprocess` (train-only). Compare residual skew.
 log_revenue = np.log1p(compact["revenue"].to_numpy())
 power = preprocess.make_power_transformer(method="yeo-johnson")
 yj_revenue = power.fit_transform(compact["revenue"].to_numpy().reshape(-1, 1)).ravel()
@@ -168,12 +166,10 @@ eda.histogram(yj_revenue, ax=axes[1], title="Yeo-Johnson(revenue)")
 print("normality (D'Agostino):", stats.normality_test(yj_revenue, method="dagostino"))
 
 # %%
-# Univariate fences (§3) miss *multivariate* outliers — a point normal on each axis but odd in the
-# joint shape (cheap unit price AND high units AND deep discount together). Mahalanobis distance
-# accounts for the correlation between columns; the largest distances are the joint anomalies to
-# eyeball before modelling.
+# Univariate fences miss multivariate outliers — normal on each axis but odd in the joint shape.
+# Mahalanobis accounts for cross-column correlation; largest distances are the joint anomalies.
 numeric_cols = ["revenue", "units", "unit_price", "discount"]
-maha = distance.mahalanobis_outliers(compact.select(numeric_cols).to_numpy())  # one cov inversion
+maha = distance.mahalanobis_outliers(compact.select(numeric_cols).to_numpy())
 flagged = compact.select(numeric_cols).with_columns(pl.Series("mahalanobis", maha))
 print(flagged.sort("mahalanobis", descending=True).head(5))
 
@@ -199,7 +195,7 @@ eda.pairplot(sample_df, ["revenue", "unit_price", "units", "discount"], hue="seg
 stats.spearman(compact.select(["revenue", "units", "unit_price", "discount"]))
 
 # %%
-# The Plotly version — hover for exact values, zoom, pan. (Needs the `interactive` extra.)
+# Plotly version — hover, zoom, pan. (Needs the `interactive` extra.)
 interactive.correlation_heatmap(compact, title="Numeric correlations (Pearson)")
 
 # %% [markdown]

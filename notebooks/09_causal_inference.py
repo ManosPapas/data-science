@@ -61,9 +61,8 @@ print(f"IPW ATE              {weighted:+.1f}")
 print(f"matched ATT          {matched_effect:+.1f}   ({(matches >= 0).sum()} pairs within caliper)")
 
 # %%
-# The assumption both tools lean on is *positivity*: every unit must have a real chance of either
-# treatment. Overlapping propensity distributions = comparable units exist at every score; a
-# separated pair would mean some customers are never comparable and no reweighting can fix that.
+# Both tools lean on *positivity*: every unit needs a real chance of either treatment. Overlapping
+# propensity distributions mean comparable units exist at every score; separation can't be fixed.
 fig, axes = base.grid(1, ncols=1)
 model.score_distribution(voucher, propensity, ax=axes[0], title="Propensity overlap (positivity)")
 
@@ -158,9 +157,8 @@ print(f"effect {sc.effect:+.1f} (true +12)   pre-fit RMSE {sc.pre_rmse:.2f}")
 sc.weights
 
 # %%
-# Placebo test — the synthetic-control significance check: pretend an *untreated* donor was the
-# treated unit and re-run. Its "effect" should hover near zero; if placebos showed effects as
-# large as the real one, the +12 would be noise, not signal.
+# Placebo test (synthetic-control significance check): pretend an untreated donor was treated and
+# re-run. Its "effect" should hover near zero; placebos as large as the real one would mean noise.
 placebo = causal.synthetic_control(
     donors_pre[:, 0],
     donors_pre[:, 1:],

@@ -657,9 +657,8 @@ def fit_discrete(
     elif dist == "nbinom":
         variance = float(x.var(ddof=1)) if x.size > 1 else mean
         if variance <= mean:
-            # The likelihood is monotone in the dispersion size n (nbinom → Poisson as n → ∞),
-            # so there is no interior MLE — an unbounded bracket search would overflow exp().
-            # Counts that aren't overdispersed are Poisson; say so, so best_discrete skips this.
+            # not overdispersed -> no interior nbinom MLE (likelihood is monotone in n); raise so
+            # best_discrete skips it rather than overflow the unbounded bracket search
             raise ValueError("counts are not overdispersed (variance <= mean) — fit 'poisson'")
 
         def negative_log_likelihood(log_n: float) -> float:
@@ -870,9 +869,8 @@ def tetrachoric(table: ArrayLike) -> float:
         return cdf - target
 
     lo, hi = -0.999, 0.999
-    # A near-degenerate table (an almost-empty off-diagonal cell) implies a latent correlation at
-    # the edge of [-1, 1]; the achievable bivariate-normal CDF then can't bracket the target, so
-    # brentq would raise. Clamp to the closer bound instead of crashing — the answer is ~±1.
+    # a near-empty cell implies a latent correlation at the edge of [-1, 1] that brentq can't
+    # bracket; clamp to the closer bound instead of crashing (the answer is ~+/-1)
     if gap(lo) * gap(hi) > 0:
         return hi if abs(gap(hi)) < abs(gap(lo)) else lo
     return float(brentq(gap, lo, hi))

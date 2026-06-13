@@ -55,16 +55,14 @@ def classification_metrics(
         "mcc": float(metrics.matthews_corrcoef(yt, yp)),
         "cohen_kappa": float(metrics.cohen_kappa_score(yt, yp)),
     }
-    # Binary problems get the confusion-derived rates by name: recall above IS sensitivity (TPR);
-    # specificity (TNR) and NPV are the negative-class mirrors a medical/fraud reviewer asks for.
+    # binary only: specificity (TNR) and NPV — the negative-class mirrors of recall/precision
     classes = np.unique(yt)
     if classes.size == 2:
         tn, fp, fn, tp = metrics.confusion_matrix(yt, yp, labels=classes).ravel()
         out["sensitivity"] = float(tp / (tp + fn)) if (tp + fn) else 0.0
         out["specificity"] = float(tn / (tn + fp)) if (tn + fp) else 0.0
         out["npv"] = float(tn / (tn + fn)) if (tn + fn) else 0.0
-    # Score-based metrics are undefined when the slice has only one class (a CV fold or segment
-    # that happens to be all-positive); skip them rather than let roc_auc_score crash the dict.
+    # score metrics are undefined on a single-class slice — skip rather than crash the dict
     if y_score is not None and classes.size == 2:
         scores = np.asarray(y_score, dtype=float)
         out["roc_auc"] = float(metrics.roc_auc_score(yt, scores))

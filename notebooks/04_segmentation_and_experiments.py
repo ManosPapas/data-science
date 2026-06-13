@@ -31,7 +31,7 @@ features_num = [
     "satisfaction",
 ]
 
-# Impute + scale once (clustering and PCA need a clean, standardized matrix).
+# Clustering and PCA need a clean, standardized matrix.
 pre = preprocess.make_preprocessor(numeric=features_num, scale=True, impute=True)
 features_x = pre.fit_transform(customers.select(features_num).to_pandas())
 features_x.shape
@@ -58,10 +58,9 @@ fig, axes = base.grid(1, ncols=1)
 cluster.explained_variance(evr, ax=axes[0], title="PCA explained variance")
 
 # %%
-# Two lenses on the same clusters: PCA preserves global variance (distances mean something),
-# t-SNE preserves local neighbourhoods (tight groups are real; axes and inter-cluster gaps are
-# not). Never feed t-SNE coords back into clustering — it's a visualization device.
-subset = np.arange(1500)  # t-SNE cost grows fast with n; a sample keeps it snappy
+# PCA preserves global variance (distances mean something); t-SNE preserves local neighbourhoods
+# (tight groups are real, but axes and inter-cluster gaps are not). Never cluster on t-SNE coords.
+subset = np.arange(1500)  # t-SNE cost grows fast with n; sample to keep it snappy
 tsne_coords = segment.tsne(features_x[subset], perplexity=35, seed=42)
 fig, axes = base.grid(2)
 cluster.cluster_scatter(coords[subset], labels[subset], ax=axes[0], title="PCA view")
@@ -70,7 +69,7 @@ cluster.cluster_scatter(
 )
 
 # %%
-# Profile the segments — who are they, and which churns most?
+# Profile the segments — who are they, which churns most?
 customers.with_columns(pl.Series("cluster", labels)).group_by("cluster").agg(
     pl.len().alias("n"),
     pl.col("monthly_spend").mean().round(0).alias("avg_spend"),
@@ -92,8 +91,8 @@ outliers = customers.with_columns(pl.Series("outlier", flags == -1)).filter(pl.c
 outliers.select(features_num).describe()
 
 # %%
-# A second opinion: Local Outlier Factor judges each point against its *neighbourhood* density,
-# so it catches different anomalies than the forest's global splits. Investigate the overlap first.
+# LOF judges each point against its neighbourhood density, catching different anomalies than the
+# forest's global splits. Investigate the overlap first.
 lof = anomaly.make_detector("local_outlier_factor", contamination=0.03)
 lof_flags = anomaly.anomaly_labels(lof, features_x)
 agree = int(((flags == -1) & (lof_flags == -1)).sum())
@@ -120,15 +119,14 @@ trt_retained = int((trt["churned"] == 0).sum())
 experiment.analyze_conversions(ctrl_retained, ctrl.height, trt_retained, trt.height)
 
 # %%
-# A guardrail metric (spend) should be unaffected — compare the means.
+# Guardrail (spend) should be unaffected — compare the means.
 spend_ctrl = ctrl["monthly_spend"].drop_nulls().to_numpy()
 spend_trt = trt["monthly_spend"].drop_nulls().to_numpy()
 experiment.analyze_means(spend_ctrl, spend_trt)
 
 # %%
-# Peeking-safe monitoring: the mSPRT p-value stays valid under continuous looking, so reading it
-# weekly is fine (a fixed-horizon t-test is not). On the flat spend guardrail it stays high —
-# correctly never tempting an early stop.
+# The mSPRT p-value stays valid under continuous looking (a fixed-horizon t-test isn't), so weekly
+# peeks are fine. On the flat spend guardrail it stays high — never tempting an early stop.
 print(f"always-valid p (spend guardrail): {experiment.msprt_means(spend_ctrl, spend_trt):.3f}")
 
 # %% [markdown]
@@ -159,7 +157,7 @@ print(
 )
 
 # %%
-# Planning: how many per arm to detect a 3pp lift, and the power we actually had.
+# How many per arm to detect a 3pp lift, and the power we actually had.
 base_retention = float((ctrl["churned"] == 0).mean())
 per_arm = stats.sample_size_proportion(base_retention, base_retention + 0.03)
 print(f"sample size needed per arm (3pp lift): {per_arm}")
@@ -193,7 +191,7 @@ print(f"propensity range [{ps.min():.2f}, {ps.max():.2f}]; {len(matched)} treate
 print(f"IPW ATE (weighting instead of matching): {causal.ipw_ate(retained, treat, ps):+.4f}")
 
 # %%
-# Difference-in-differences (illustrative pre/post retention for the two arms).
+# DiD with illustrative pre/post retention for the two arms.
 did = causal.difference_in_differences(
     control_before=0.80, control_after=0.79, treat_before=0.80, treat_after=0.86
 )

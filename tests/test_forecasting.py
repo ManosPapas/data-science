@@ -39,7 +39,7 @@ def test_prediction_interval_brackets_point(rng: np.random.Generator) -> None:
     assert np.all(lower <= point + 1e-6)
     assert np.all(point <= upper + 1e-6)
     width = upper - lower
-    assert np.all(width > 0)  # a real, non-degenerate band
+    assert np.all(width > 0)  # non-degenerate band
     assert width[-1] > width[0]  # uncertainty grows with the horizon
 
 

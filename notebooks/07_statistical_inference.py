@@ -42,11 +42,11 @@ stats.best_distribution(spend, candidates=("norm", "lognorm", "gamma", "expon", 
 fig, axes = base.grid(2)
 eda.histogram(spend, ax=axes[0], title="Monthly spend")
 eda.qq(spend, ax=axes[1], title="Q-Q vs normal — heavy right tail")
-print(stats.normality_test(spend[:500]))  # Shapiro on a subsample: decisively non-normal
+print(stats.normality_test(spend[:500]))  # Shapiro on a subsample
 
 # %%
-# The payoff of a fitted model: parametric tail probabilities. Fit the gamma by MLE, simulate
-# from it, and ask business questions the histogram answers only noisily in the tail.
+# The payoff of a fitted model: parametric tail probabilities. Fit gamma by MLE, simulate from it,
+# and ask business questions the histogram answers only noisily in the tail.
 fit = stats.fit_distribution(spend, "gamma")
 shape, loc, scale = fit["params"]
 rng = np.random.default_rng(42)
@@ -108,8 +108,8 @@ fig, axes = base.grid(1, ncols=1)
 eda.ks(premium, basic, labels=("premium", "basic"), ax=axes[0], title="Spend ECDFs by plan")
 
 # %%
-# Across all three plans in one call — picks the right test and reports the effect size; eta²
-# is the share of spend variance that plan membership alone explains.
+# Across all three plans in one call — picks the test and reports the effect size; eta² is the
+# share of spend variance plan membership alone explains.
 plans = [
     customers.filter(pl.col("plan") == p)["monthly_spend"].drop_nulls().to_numpy()
     for p in ("basic", "standard", "premium")
@@ -121,7 +121,7 @@ print(f"eta² (variance explained by plan): {stats.eta_squared(plans):.2f}")
 stats.group_summary(customers.drop_nulls("monthly_spend"), value="monthly_spend", group="plan")
 
 # %%
-# Is churn associated with plan at all? (two categoricals -> chi-square)
+# Churn vs plan: two categoricals -> chi-square.
 print(stats.chi_square(customers["plan"].to_numpy(), customers["churned"].to_numpy()))
 
 # %% [markdown]
@@ -132,21 +132,21 @@ print(stats.chi_square(customers["plan"].to_numpy(), customers["churned"].to_num
 # on the right data is still the wrong answer.
 
 # %%
-# One-sample: is mean satisfaction different from the 7.0 target the CX team commits to?
+# One-sample: mean satisfaction vs the CX team's 7.0 target.
 satisfaction = customers["satisfaction"].drop_nulls().to_numpy()
 print(f"one-sample t (vs 7.0)   {stats.one_sample_t_test(satisfaction, 7.0)}")
 
-# Goodness-of-fit: is the region mix uniform, or skewed toward some regions?
+# Goodness-of-fit: is the region mix uniform or skewed?
 region_counts = customers["region"].value_counts(sort=True)["count"].to_numpy()
 print(f"chi-square GOF (uniform){stats.chi_square_gof(region_counts)}")
 
-# Fisher's exact: a rare-cell 2x2 (a tiny pilot cohort) where chi-square is untrustworthy
+# Fisher's exact: a rare-cell 2x2 where chi-square is untrustworthy.
 pilot = [[8, 2], [3, 20]]  # converted/not by arm, small n
 print(f"fisher's exact          {stats.fishers_exact(pilot)}  (statistic = odds ratio)")
 
 # %%
-# Paired / repeated measures: the SAME customers surveyed under three onboarding variants.
-# Friedman = the non-parametric repeated-measures ANOVA; Wilcoxon signed-rank = its paired case.
+# Paired / repeated measures: the SAME customers under three onboarding variants. Friedman = the
+# non-parametric repeated-measures ANOVA; Wilcoxon signed-rank = its paired case.
 base_score = rng.normal(6.5, 1.2, 200)
 variant_a = base_score + rng.normal(0.0, 0.4, 200)  # ~ no change
 variant_b = base_score + 0.6 + rng.normal(0.0, 0.4, 200)  # a real lift
@@ -161,8 +161,8 @@ print(f"wilcoxon (a vs c)       {stats.wilcoxon_signed_rank(variant_a, variant_c
 # below covers each case on real customer columns.
 
 # %%
-# Continuous ↔ continuous, but curved: Pearson under-reads a monotonic relationship; Spearman and
-# Kendall (rank-based, robust to the curve and to ties) nail it.
+# Continuous-continuous but curved: Pearson under-reads the monotonic relationship; Spearman and
+# Kendall (rank-based, robust to curve and ties) nail it.
 curved_x = rng.uniform(1.0, 10.0, 300)
 curved_y = curved_x**4 + rng.normal(0.0, 80.0, 300)
 for method in ("pearson", "spearman", "kendall"):
@@ -180,12 +180,12 @@ for x_kind, y_kind in [
     print(f"{x_kind:11s} x {y_kind:11s} -> {stats.correlation_kind(x_kind, y_kind)}")
 
 # %%
-# Binary vs continuous: does churn (0/1) relate to monthly spend? -> point-biserial.
+# Binary vs continuous: churn (0/1) vs monthly spend -> point-biserial.
 churned = customers["churned"].to_numpy()
 spend_filled = customers["monthly_spend"].fill_null(strategy="mean").to_numpy()
 print(f"point-biserial (churn vs spend)  {stats.point_biserial(churned, spend_filled)}")
 
-# Categorical vs categorical: plan-region association magnitude -> Cramér's V (+ chi-square p).
+# Categorical vs categorical: plan-region association -> Cramer's V.
 cramers = stats.cramers_v(customers["plan"].to_numpy(), customers["region"].to_numpy())
 print(f"Cramer's V  (plan vs region)     {cramers:.3f}")
 
@@ -246,7 +246,7 @@ stats.missingness_dependence(
 )
 
 # %%
-# All p-values are large -> MCAR here, so flag + median-fill is defensible.
+# All p-values large -> MCAR, so flag + median-fill is defensible.
 filled = customers.pipe(clean.add_missing_indicators).pipe(
     clean.fill_missing, strategy="median", columns=["monthly_spend", "satisfaction"]
 )

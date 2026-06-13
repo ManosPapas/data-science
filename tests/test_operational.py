@@ -22,7 +22,7 @@ def test_feed_readiness_coverage_and_missing_expected() -> None:
         log, entity="bag", milestone="milestone", expected=["checkin", "load", "arrival"]
     )
     by = dict(zip(cov["milestone"].to_list(), cov["coverage"].to_list(), strict=True))
-    assert by["checkin"] == pytest.approx(1.0)  # all 3 bags
+    assert by["checkin"] == pytest.approx(1.0)  # all 3 bags seen
     assert by["load"] == pytest.approx(1 / 3)
     assert by["arrival"] == pytest.approx(0.0)  # expected but never seen
 
@@ -111,7 +111,7 @@ def test_intervention_roi() -> None:
 
 
 def test_cross_environment_matrix(rng: np.random.Generator) -> None:
-    # two environments with OPPOSITE decision rules → off-diagonal transfer should be poor
+    # opposite decision rules in each env -> off-diagonal transfer should be poor
     def env(flip: bool, n: int = 300) -> tuple[pl.DataFrame, np.ndarray]:
         x = pl.DataFrame({"f": rng.normal(size=n)})
         rule = x["f"].to_numpy() < 0 if flip else x["f"].to_numpy() > 0
@@ -125,7 +125,7 @@ def test_cross_environment_matrix(rng: np.random.Generator) -> None:
     matrix = compare.cross_environment(lambda: LogisticRegression(), environments, scoring=accuracy)
     cells = {(r["train"], r["test"]): r["score"] for r in matrix.iter_rows(named=True)}
     assert cells[("a", "a")] > 0.9 and cells[("b", "b")] > 0.9  # in-domain strong
-    assert cells[("a", "b")] < 0.3  # opposite rule → transfer fails, as it should
+    assert cells[("a", "b")] < 0.3  # opposite rule -> transfer fails, as it should
 
 
 def test_generate_alerts_rejects_none_action_collision() -> None:

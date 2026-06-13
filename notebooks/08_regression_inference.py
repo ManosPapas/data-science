@@ -111,9 +111,8 @@ fit_churn = regression.glm_fit(customers, y="churned", x=x_churn, family="binomi
 fit_churn.coefficients.with_columns(pl.col("coef").exp().round(3).alias("odds_ratio"))
 
 # %%
-# Interaction check: does satisfaction buffer the effect of support tickets? (Moderation test —
-# here the interaction is ~0: ticket pain doesn't depend on satisfaction level in this data.
-# Linear models only see interactions you *give* them; trees below find their own.)
+# Does satisfaction buffer the effect of support tickets? Here the interaction is ~0. Linear
+# models only see interactions you *give* them; trees below find their own.
 with_ix = customers.pipe(transform.add_interactions, [("support_tickets", "satisfaction")])
 fit_ix = regression.glm_fit(
     with_ix, y="churned", x=[*x_churn, "support_tickets_x_satisfaction"], family="binomial"
@@ -249,7 +248,7 @@ next_quarter = customers.with_columns(
     (pl.col("monthly_spend") * 1.25),
     (pl.col("sessions_30d") + 3),
 )
-# PSI bins on baseline quantiles, so feed it the continuous drivers (binary dummies can't bin).
+# PSI bins on baseline quantiles, so feed it continuous drivers (binary dummies can't bin).
 monitor.drift_report(customers.select(drivers), next_quarter.select(drivers)).head(5)
 
 # %%

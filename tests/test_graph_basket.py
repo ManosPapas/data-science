@@ -112,7 +112,7 @@ def test_association_rules_raise_without_pairs() -> None:
 
 
 def test_frequent_itemsets_arbitrary_max_size() -> None:
-    # max_size is now a real knob (was hard-capped at 3): a 4-item bundle must surface
+    # max_size is a real knob (was hard-capped at 3): a 4-item bundle must surface
     rows = []
     for tx in range(50):
         for it in ["a", "b", "c", "d"]:  # all four in every basket
@@ -127,7 +127,7 @@ def test_frequent_itemsets_arbitrary_max_size() -> None:
 
 
 def test_itemset_and_rule_supports_agree() -> None:
-    # shared frequent-set miner → pair support in both APIs must match exactly
+    # shared miner: pair support must match across both APIs
     df = _baskets()
     itemsets = basket.frequent_itemsets(df, transaction="order", item="item", min_support=0.05)
     rules = basket.association_rules(
@@ -143,7 +143,7 @@ def test_itemset_and_rule_supports_agree() -> None:
 
 
 def test_undirected_weight_not_doubled_on_both_orientations() -> None:
-    # an edge listed in both directions is one undirected edge — weight must not double
+    # an edge listed in both directions is one undirected edge; weight must not double
     edges = pl.DataFrame(
         {"source": ["a", "b", "a"], "target": ["b", "a", "c"], "w": [3.0, 3.0, 4.0]}
     )
@@ -153,7 +153,7 @@ def test_undirected_weight_not_doubled_on_both_orientations() -> None:
 
 
 def test_frequent_itemsets_keeps_boundary_exact_support() -> None:
-    # an item with support EXACTLY min_support must survive (float round-up must not drop it)
+    # support EXACTLY min_support must survive (float round-up must not drop it)
     rows = [{"order": t, "item": "x"} for t in range(7)]  # 7 of 100 transactions
     rows += [{"order": t, "item": "filler"} for t in range(7, 100)]
     df = pl.DataFrame(rows)

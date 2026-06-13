@@ -51,8 +51,8 @@ print(
 
 # %%
 # Revenue and profit want different prices. With elastic demand (e < -1) revenue keeps rising as
-# price falls — its "optimum" is the lowest candidate, i.e. the boundary — while profit has a real
-# interior maximum where margin times demand peaks. Optimize profit; report revenue.
+# price falls (its "optimum" is the boundary), while profit has a real interior maximum. Optimize
+# profit; report revenue.
 revenue_curve = pricing.optimize.revenue_at(intercept, elasticity, candidates)
 profit_curve_values = pricing.optimize.profit_at(
     intercept, elasticity, candidates, unit_cost=unit_cost
@@ -61,7 +61,7 @@ print(f"revenue-maximizing candidate: {candidates[int(np.argmax(revenue_curve))]
 print(f"profit-maximizing candidate : {candidates[int(np.argmax(profit_curve_values))]:.0f}")
 
 # %%
-# The whole trade-off, interactively (Plotly — hover to read exact values at any price point).
+# The whole trade-off interactively (Plotly — hover for exact values).
 price_frame = pl.DataFrame(
     {"price": candidates, "revenue": revenue_curve, "profit": profit_curve_values}
 ).unpivot(on=["revenue", "profit"], index="price")
@@ -113,8 +113,8 @@ print(f"F1-max threshold     {f1_threshold:.2f} -> €{value_at(f1_threshold):,.
 print(f"default 0.5          -> €{value_at(0.5):,.0f}")
 
 # %%
-# Why the optima differ: F1 balances precision and recall symmetrically; the money curve does not
-# care about symmetry — a missed churner costs 11x a wasted offer, so it pushes the cut far left.
+# F1 balances precision and recall symmetrically; the money curve doesn't — a missed churner costs
+# 11x a wasted offer, pushing the cut far left.
 fig, axes = base.grid(1, ncols=1)
 model.threshold_curve(y_test, scores, ax=axes[0], title="Precision / recall / F1 vs threshold")
 
@@ -154,7 +154,7 @@ scenario.sensitivity(
 )
 
 # %%
-# The same base case in KPI language: incremental margin vs campaign cost.
+# Same base case in KPI language: incremental margin vs campaign cost.
 incremental = base_case["reach"] * base_case["uplift_pp"] * base_case["margin"]
 spend = base_case["reach"] * base_case["contact_cost"]
 print(
@@ -241,7 +241,7 @@ for name, policy in policies.items():
     print(f"{name:14s} {conversions:.0f} conversions")
 
 # %%
-# Inside the winner: Thompson's per-arm Beta posteriors — uncertainty that *acts*.
+# Inside the winner: Thompson's per-arm Beta posteriors — uncertainty that acts.
 thompson = policies["thompson"]
 posterior_means = thompson.alpha / (thompson.alpha + thompson.beta)
 pulls = (thompson.alpha + thompson.beta - 2.0).astype(int)

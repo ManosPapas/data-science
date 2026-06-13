@@ -22,8 +22,8 @@ class QueueMetrics:
     average_wait: float
     average_queue: float
 
-    # The arrival/service rates the SLA formula needs; required (no defaults) so a hand-built
-    # QueueMetrics can't silently report decay=0, and repr=False keeps them out of the printout.
+    # rates the SLA formula needs; required (not defaulted) so a hand-built instance can't silently
+    # report decay=0; repr=False keeps them out of the printout
     arrival_rate: float = field(repr=False)
     service_rate: float = field(repr=False)
 

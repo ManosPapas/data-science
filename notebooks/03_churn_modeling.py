@@ -128,8 +128,7 @@ models = {
 list(models)
 
 # %%
-# `n_jobs=-1` fits the folds across all cores — the cheap speed-up once models or folds are slow;
-# leave it at 1 for fast models or fully reproducible serial runs.
+# `n_jobs=-1` fits folds across all cores; leave at 1 for fast models or reproducible serial runs.
 cv = split.make_cv("stratified", n_splits=5)
 board = compare.leaderboard(
     models, x_train, y_train, cv=cv, scoring=["roc_auc", "average_precision", "f1"], n_jobs=-1
@@ -253,10 +252,9 @@ y_pred = train.predict(fitted, x_test)
 print("winner:", best_name)
 
 # %%
-# Binary problems get the confusion-derived rates by name: sensitivity (= recall, catching real
-# churners), specificity (correctly clearing the stayers), and NPV (trust in a "won't churn"
-# call) sit beside precision/F1/MCC. Which one you optimize is the business question — a retention
-# team that hates false alarms watches specificity; one that can't afford to miss churners watches
+# Confusion-derived rates by name: sensitivity (recall, churners caught), specificity (stayers
+# cleared), NPV (trust in a "won't churn" call), beside precision/F1/MCC. Which to optimize is a
+# business call — false-alarm-averse teams watch specificity; can't-miss-churners teams watch
 # sensitivity.
 report = evaluate.classification_metrics(y_test, y_pred, y_score=y_score)
 print({k: round(v, 3) for k, v in report.items()})
@@ -293,7 +291,7 @@ print(f"profit-optimal threshold: {threshold:.2f}  expected value: {value:,.0f}"
 
 # %%
 x_test_pd = x_test.to_pandas()
-x_test_pd[numeric] = x_test_pd[numeric].astype("float64")  # PDP/perm want float, not int
+x_test_pd[numeric] = x_test_pd[numeric].astype("float64")  # PDP/perm need float, not int
 perm = sk_permutation(
     fitted, x_test_pd, y_test.to_numpy(), n_repeats=5, random_state=42, scoring="roc_auc"
 )
@@ -341,7 +339,7 @@ saved = persist.save_model(
 print(f"saved -> {saved}   versions: {persist.model_versions('churn')}")
 
 # %%
-# The round trip a scoring job would do: load the newest version, batch-score fresh rows.
+# The round trip a scoring job does: load newest version, batch-score fresh rows.
 reloaded = persist.load_model("churn")
 train.score_frame(reloaded, test_df.select(features).head(5)).select(
     ["age", "tenure_months", "plan", "prediction"]

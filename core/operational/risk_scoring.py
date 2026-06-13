@@ -47,6 +47,5 @@ def rescore_sequence(
             data[id_column] = snapshot[id_column]
         data["risk"] = risk
         frames.append(pl.DataFrame(data))
-    # vertical_relaxed: tolerate an id_column whose dtype drifts across checkpoints (Int32 one
-    # feed, Int64 another) by supertyping, rather than raising mid-trajectory.
+    # vertical_relaxed supertypes an id_column whose dtype drifts across checkpoints (Int32/Int64)
     return pl.concat(frames, how="vertical_relaxed")

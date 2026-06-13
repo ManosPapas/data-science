@@ -43,7 +43,7 @@ shipments = pl.DataFrame(
     {"shipment": [f"s{i}" for i in range(n)], "distance": distance, "congested_hub": congested_hub}
 )
 
-# build the event log: every shipment is booked; scans drop out with milestone-specific rates
+# event log: every shipment is booked; later scans drop out at milestone-specific rates
 milestones = ["booked", "collected", "in_transit", "out_for_delivery", "delivered"]
 drop_rate = {
     "booked": 0.0,
@@ -94,7 +94,7 @@ model = train.fit(
     registry.make_model("gradient_boosting", task="classification"), train_df, y_train
 )
 
-# three checkpoints for a sample of shipments: congestion signal sharpens as the bag moves
+# three checkpoints: congestion signal sharpens as the shipment moves
 sample = test_df.head(6).with_columns(pl.Series("shipment", [f"t{i}" for i in range(6)]))
 snapshots = {
     "booked": sample,

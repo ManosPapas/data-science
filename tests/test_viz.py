@@ -62,13 +62,13 @@ def test_chart_signature_shows_injected_kwargs() -> None:
     import inspect
 
     params = inspect.signature(eda.histogram).parameters
-    assert "values" in params  # the draw function's own data parameter
+    assert "values" in params  # the draw function's own data param
     for injected in ("ax", "title", "grid", "save"):
         assert injected in params  # Jupyter help must show the decorator's keywords
 
 
 def test_interactive_charts_return_plotly_figure() -> None:
-    pytest.importorskip("plotly")  # optional 'interactive' extra — skip, don't fail, without it
+    pytest.importorskip("plotly")  # optional 'interactive' extra: skip, don't fail, without it
     df = pl.DataFrame({"x": [1, 2, 3], "y": [3.0, 1.0, 2.0]})
     fig = interactive.line(df, "x", "y", title="t")
     assert type(fig).__module__.startswith("plotly")

@@ -32,8 +32,8 @@ y = daily["revenue"].to_numpy()
 # order in notebook 05 encodes.
 
 # %%
-# Eyes first: a drifting rolling mean is non-stationarity you can see, and the lag plot's tight
-# diagonal says adjacent days are strongly dependent (memory the tests then quantify).
+# Eyes first: a drifting rolling mean is visible non-stationarity, and the lag plot's tight
+# diagonal shows strong day-to-day dependence (memory the tests then quantify).
 fig, axes = base.grid(2)
 timeseries.rolling_stats(y, window=30, ax=axes[0], title="Rolling mean & std (30d)")
 timeseries.lag_plot(y, lag=7, ax=axes[1], title="Lag-7 dependence")

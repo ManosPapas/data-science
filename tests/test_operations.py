@@ -13,7 +13,7 @@ def test_newsvendor_normal_overstocks_on_high_margin() -> None:
         price=10.0, cost=4.0, salvage=1.0, demand_mean=100.0, demand_std=20.0
     )
     assert result.critical_fractile == pytest.approx(6.0 / 9.0)
-    assert result.quantity > 100.0  # high margin -> stock above mean demand
+    assert result.quantity > 100.0  # high margin -> stock above mean
     assert result.expected_sales < 100.0
     assert result.expected_profit > 0
 
@@ -103,7 +103,7 @@ def test_required_servers_needs_exactly_one_target() -> None:
 def test_queue_metrics_requires_rates() -> None:
     import pytest
 
-    # the SLA-formula rates are now required — a hand-built QueueMetrics can't silently omit them
+    # SLA-formula rates are required; a hand-built QueueMetrics can't omit them
     with pytest.raises(TypeError):
         capacity.QueueMetrics(
             servers=3, utilization=0.5, wait_probability=0.2, average_wait=0.1, average_queue=0.3

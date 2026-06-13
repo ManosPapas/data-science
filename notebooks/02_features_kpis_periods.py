@@ -43,7 +43,7 @@ tx = transform.discretize(
 tx.select(["region", "revenue", "revenue_pct", "revenue_bin"]).head()
 
 # %%
-# Join to the customer master. Align the key dtype first (the clean frame was downcast to Int32).
+# Align the key dtype first — the clean frame was downcast to Int32.
 right = customers.select(["customer_id", "plan", "age"]).with_columns(
     pl.col("customer_id").cast(tx["customer_id"].dtype)
 )
@@ -71,14 +71,12 @@ financial_kpis = {
 pl.DataFrame({"kpi": list(financial_kpis), "value": list(financial_kpis.values())})
 
 # %%
-# Revenue by year, with compound annual growth across the window.
 yearly = transform.aggregate(tx, "year", {"revenue": "sum"}).sort("year")
 cagr = financial.cagr(yearly["revenue_sum"][0], yearly["revenue_sum"][-1], yearly.height - 1)
 print(f"CAGR across {yearly.height} years: {cagr:.1%}")
 yearly.with_columns(pl.col("revenue_sum").pct_change().alias("yoy_growth"))
 
 # %%
-# Per-segment revenue, orders and AOV.
 by_segment = transform.aggregate(tx, "segment", {"revenue": "sum", "order_id": "count"})
 by_segment.with_columns(
     (pl.col("revenue_sum") / pl.col("order_id_count")).round(2).alias("aov")
@@ -99,7 +97,7 @@ print(f"repeat rate: {repeat:.1%}   NPS (from satisfaction): {nps_value:.0f}")
 behaviour.funnel([10000, 6200, 3100, 1850], ["visits", "carts", "checkout", "purchase"])
 
 # %%
-# Stage-by-stage rates from the same funnel numbers — where exactly do we leak?
+# Stage-by-stage rates — where exactly do we leak?
 print(f"add-to-cart  {behaviour.add_to_cart_rate(6200, 10000):.0%}")
 print(f"checkout     {behaviour.checkout_rate(3100, 6200):.0%}")
 print(f"abandonment  {behaviour.cart_abandonment_rate(1850, 3100):.0%} of checkouts never purchase")
@@ -133,7 +131,7 @@ retention = (
     .pivot("months_since", index="cohort", values="retention")
     .sort("cohort")
     .head(9)
-    .with_columns(cs.numeric().fill_null(0.0))  # a missing cell means nobody ordered: 0%
+    .with_columns(cs.numeric().fill_null(0.0))  # missing cell = nobody ordered = 0%
     .with_columns(pl.col("cohort").dt.strftime("%Y-%m"))
 )
 fig, axes = base.grid(1, ncols=1)
@@ -161,11 +159,10 @@ pl.DataFrame(
 )
 
 # %%
-# Quarter-over-quarter revenue per region in one shot.
 period.compare_periods_by(tx, "order_date", "revenue", "region", period="quarter")
 
 # %%
-# Any two explicit windows compare the same way — e.g. this Q2 vs Q1 (campaign vs baseline).
+# Any two explicit windows compare the same way — here Q2 vs Q1 (campaign vs baseline).
 from datetime import date
 
 period.compare_windows(

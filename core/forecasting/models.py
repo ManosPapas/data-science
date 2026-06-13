@@ -155,8 +155,7 @@ class _MLReduction:
     def predict_interval(
         self, horizon: int, *, alpha: float = 0.05, x: Any = None, point: ArrayLike | None = None
     ) -> tuple[NDArray[np.float64], NDArray[np.float64]]:
-        # sigma is the one-step holdout residual std cached at fit time; the band widens with
-        # sqrt(horizon) — an approximation for the recursive multi-step forecast.
+        # band = cached one-step residual std widened by sqrt(horizon) (a multi-step approximation)
         center = np.asarray(point, dtype=float) if point is not None else self.predict(horizon)
         return _normal_band(center, self._sigma, alpha, grow=True)
 

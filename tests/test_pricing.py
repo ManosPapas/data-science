@@ -30,7 +30,7 @@ def test_fit_demand_needs_price_variation(rng: np.random.Generator) -> None:
 
 def test_optimal_price_rejects_bad_candidates() -> None:
     with pytest.raises(ValueError, match="strictly positive"):
-        optimize.optimal_price(8.0, -2.0, np.linspace(0.0, 50.0, 11))  # p=0 -> inf demand
+        optimize.optimal_price(8.0, -2.0, np.linspace(0.0, 50.0, 11))  # p=0 -> infinite demand
     with pytest.raises(ValueError, match="strictly positive"):
         optimize.optimal_price(8.0, -2.0, np.array([]))
 

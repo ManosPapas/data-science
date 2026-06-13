@@ -27,7 +27,7 @@ RAW = ROOT / "data" / "raw"
 
 # %%
 lf = scan_parquet(RAW / "customers.parquet")
-type(lf).__name__  # 'LazyFrame' — no data in memory yet
+type(lf).__name__  # LazyFrame — no data read yet
 
 # %%
 premium_by_region = (
@@ -39,11 +39,11 @@ premium_by_region = (
     )
     .sort("customers", descending=True)
 )
-# The optimized plan shows projection & predicate pushdown into the scan:
+# Plan shows projection & predicate pushdown into the scan.
 print(premium_by_region.explain())
 
 # %%
-premium_by_region.collect()  # only now is anything read — and only the columns/rows needed
+premium_by_region.collect()  # only now is anything read, and only the columns/rows needed
 
 # %% [markdown]
 # ## 2. DuckDB — SQL straight over files (out-of-core)
@@ -58,7 +58,7 @@ query_files(
 )
 
 # %%
-# DuckDB reads CSV directly too — handy for raw exports before they're converted to Parquet.
+# DuckDB reads CSV directly too — handy for raw exports pre-Parquet.
 transactions_path = (RAW / "transactions.csv").as_posix()
 query_files(
     f"SELECT segment, count(*) AS orders, round(sum(revenue)) AS revenue "
@@ -120,7 +120,7 @@ def premium_spend_by_region(plan: str) -> pl.DataFrame:
 
 
 premium_spend_by_region("premium")  # computes and writes the cache
-premium_spend_by_region("premium")  # served straight from Parquet
+premium_spend_by_region("premium")  # served from Parquet
 print([p.name for p in (ROOT / "data" / "interim").glob("premium_spend_by_region-*.parquet")])
 
 # %% [markdown]
@@ -132,8 +132,8 @@ print([p.name for p in (ROOT / "data" / "interim").glob("premium_spend_by_region
 # %%
 numeric_cols = ["age", "tenure_months", "num_products", "sessions_30d", "support_tickets"]
 stream = scan_parquet(RAW / "customers.parquet").select([*numeric_cols, "churned"])
-# average=True (Polyak averaging) is the standard stabilizer for streaming SGD — without it the
-# last noisy gradient steps dominate and one-pass performance hovers near chance.
+# average=True (Polyak averaging) stabilizes streaming SGD — without it the last noisy gradient
+# steps dominate and one-pass performance hovers near chance.
 sgd = registry.make_model(
     "sgd", task="classification", loss="log_loss", average=True, alpha=1e-3, random_state=42
 )
@@ -150,8 +150,8 @@ for epoch in range(epochs):
 print(f"streamed {n_rows} rows x {epochs} epochs in {n_rows // chunk_size}-chunk passes")
 
 # %%
-# Did streaming cost us anything? Score both the streamed SGD and a full-batch logistic that was
-# allowed to see everything at once — the streamed model should land in the same place.
+# Did streaming cost us anything? Compare the streamed SGD against a full-batch logistic that saw
+# everything at once — the streamed model should land in the same place.
 full = stream.collect()
 x_full = scaler.transform(full.select(numeric_cols).to_numpy())
 y_full = full["churned"].to_numpy()

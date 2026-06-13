@@ -94,8 +94,7 @@ print("diagnosis: price proxies customer value in the training data (confounding
 print("fix: causal price variation (nb 09/13) or a monotone constraint — then re-check.")
 
 # %%
-# The same model class, constrained to the business-known signs, passes the gate with
-# essentially no accuracy cost — this is the shippable variant.
+# Same model class, constrained to the business-known signs: the shippable variant.
 monotone = train.fit(
     registry.make_model("hist_gradient_boosting", task="classification", monotonic_cst=[-1, 1, -1]),
     train_df,

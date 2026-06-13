@@ -161,7 +161,7 @@ print("mostly mix -> the answer is portfolio/acquisition strategy, not blanket p
 
 # %%
 offers = rng.uniform(50.0, 160.0, 6000)
-wtp_true = rng.logistic(105.0, 14.0, 6000)  # median €105, scale 14
+wtp_true = rng.logistic(105.0, 14.0, 6000)
 purchased = (wtp_true >= offers).astype(float)
 
 logit = pricing.demand.fit_logit_demand(offers, purchased)
@@ -172,7 +172,7 @@ pricing.demand.willingness_to_pay(offers, purchased)
 price_grid = np.linspace(50.0, 160.0, 111)
 schedule = pricing.demand.demand_schedule(
     lambda p: logit.predict(p) * 10_000,
-    price_grid,  # 10k prospects in the market
+    price_grid,  # 10k prospects
 )
 interactive.line(
     schedule.unpivot(on=["quantity", "revenue"], index="price"),
@@ -183,10 +183,7 @@ interactive.line(
 )
 
 # %%
-# Consumer surplus = the value buyers capture above what they pay = the area under the demand
-# curve above the chosen price (∫ quantity d(price) from p upward). `curves.integrate` turns the
-# demand schedule into that money figure — the welfare number behind a "leave money on the table"
-# argument for raising price, or a customer-value argument against it.
+# Consumer surplus: area under the demand curve above the chosen price.
 chosen_price = 100.0
 above = schedule.filter(pl.col("price") >= chosen_price)
 surplus = curves.integrate(above["price"].to_numpy(), above["quantity"].to_numpy())

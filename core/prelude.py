@@ -83,9 +83,8 @@ from core.viz import (
 )
 from core.viz.base import set_theme
 
-# Notebook ergonomics — runs on import. This prelude is the interactive layer only (library modules
-# never import it, so tests/CI still surface real warnings). Silence noisy third-party warnings and
-# show every column when inspecting frames.
+# Notebook ergonomics (interactive layer only — library modules never import this, so tests still
+# surface real warnings): silence noisy third-party warnings and widen frame display.
 warnings.filterwarnings("ignore")
 pl.Config.set_tbl_cols(-1)
 pl.Config.set_tbl_width_chars(200)

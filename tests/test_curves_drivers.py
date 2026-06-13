@@ -154,7 +154,7 @@ def test_gradient_skips_boolean_flags() -> None:
 
 
 def test_price_volume_mix_survives_zero_net_volume() -> None:
-    # a segment whose volume nets to zero with nonzero revenue (credits) → no inf in the bridge
+    # segment whose volume nets to zero with nonzero revenue (credits): no inf in the bridge
     baseline = pl.DataFrame(
         {"s": ["a", "a", "b"], "price": [10.0, 10.0, 20.0], "volume": [5.0, -5.0, 100.0]}
     )
