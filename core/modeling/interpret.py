@@ -17,13 +17,8 @@ import numpy as np
 import polars as pl
 from numpy.typing import ArrayLike, NDArray
 
-from core.modeling.train import predict, predict_proba
-
-
-def _score(model: Any, x: pl.DataFrame) -> NDArray[np.float64]:
-    if hasattr(model, "predict_proba"):
-        return np.asarray(predict_proba(model, x)[:, 1], dtype=float)
-    return np.asarray(predict(model, x), dtype=float)
+from core.modeling.train import predict
+from core.modeling.train import score as _score
 
 
 @dataclass(frozen=True)
@@ -82,7 +77,7 @@ def counterfactual(
 
     evaluated = 0
     for size in range(1, max_changes + 1):
-        options: list[tuple[float, dict[str, Any]]] = []
+        options: list[tuple[float, dict[str, Any], float]] = []
         for names in combinations(candidates, size):
             pools = [np.asarray(candidates[name]).tolist() for name in names]
             for values in product(*pools):
@@ -100,11 +95,10 @@ def counterfactual(
                 score = float(_score(model, variant)[0])
                 if meets(score):
                     cost = sum(normalized_move(n, v) for n, v in change.items())
-                    options.append((cost, {**change, "_score": score}))
+                    options.append((cost, change, score))
         if options:
-            cost, best = min(options, key=lambda pair: pair[0])
-            score = float(best.pop("_score"))
-            return Counterfactual(True, best, score, baseline, evaluated)
+            cost, change, score = min(options, key=lambda option: option[0])
+            return Counterfactual(True, change, score, baseline, evaluated)
     return Counterfactual(False, {}, baseline, baseline, evaluated)
 
 

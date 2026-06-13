@@ -111,17 +111,21 @@ popularity_scores = dict(
     zip(popular["item"].to_list(), popular["interactions"].to_list(), strict=True)
 )
 
-eligible = [
-    order_id
-    for order_id in test_set["order"].to_list()
-    if train_set.filter(pl.col("order") == order_id).height > 0
-]
+# Group once into {order: [items]} lookups instead of filtering the frame per order (which is a
+# full scan each time — quadratic on real data). One pass, then dict access in the loop.
+train_by_order = {
+    row["order"]: row["item"]
+    for row in train_set.group_by("order").agg("item").iter_rows(named=True)
+}
+test_target = dict(zip(test_set["order"].to_list(), test_set["item"].to_list(), strict=True))
+
+eligible = [order_id for order_id in test_target if order_id in train_by_order]
 sampled = rng.choice(np.array(eligible), size=min(400, len(eligible)), replace=False)
 
 relevance_rows, model_rows, baseline_rows = [], [], []
 for order_id in sampled:
-    target = test_set.filter(pl.col("order") == order_id)["item"][0]
-    seen = set(train_set.filter(pl.col("order") == order_id)["item"].to_list())
+    target = test_target[order_id]
+    seen = set(train_by_order[order_id])
     candidates = [item for item in catalog_items if item not in seen]
     if target not in candidates:
         continue

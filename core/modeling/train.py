@@ -60,6 +60,18 @@ def score_frame(model: Any, df: pl.DataFrame, *, column: str = "prediction") -> 
     return df.with_columns(pl.Series(column, model.predict(to_features(df))))
 
 
+def score(model: Any, x: Any, *, positive_class: int = 1) -> NDArray[np.float64]:
+    """A model's scalar score per row: class probability for classifiers, prediction otherwise.
+
+    The single definition of "the number governance/explanation tools judge" — used by
+    ``modeling.checks`` and ``modeling.interpret``. ``positive_class`` selects the probability
+    column for classifiers (default the positive class of a binary model; set it for multiclass).
+    """
+    if hasattr(model, "predict_proba"):
+        return np.asarray(predict_proba(model, x)[:, positive_class], dtype=float)
+    return np.asarray(predict(model, x), dtype=float)
+
+
 def partial_fit(model: Any, x: Any, y: Any, *, classes: Any = None) -> Any:
     """Incrementally update a partial_fit model (sgd/mlp/naive bayes); pass ``classes`` once."""
     if classes is not None:

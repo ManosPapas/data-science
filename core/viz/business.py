@@ -1,4 +1,4 @@
-"""Decision-science charts — tornado, waterfall, fans, control charts, frontiers, pricing.
+"""Business & decision-science charts — tornado, waterfall, fans, control, frontiers, pricing.
 
 The deck-ready visuals for the ``decision`` / ``pricing`` / ``analytics.drivers`` toolkits. Same
 contract as every chart group: prepared data in (the frames those modules return), an ``Axes``

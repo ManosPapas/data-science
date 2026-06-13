@@ -13,7 +13,7 @@ import pandas as pd
 import polars as pl
 import polars.selectors as cs
 
-from core import pricing
+from core import operational, pricing
 from core.analytics import (
     basket,
     bayes,
@@ -70,9 +70,9 @@ from core.utils import report
 from core.utils.memory import memory_report
 from core.viz import (
     base,
+    business,
     cluster,
     conceptual,
-    decision,
     eda,
     explain,
     interactive,
@@ -99,6 +99,7 @@ __all__ = [
     "basket",
     "bayes",
     "behaviour",
+    "business",
     "cached",
     "capacity",
     "catalog",
@@ -110,7 +111,6 @@ __all__ = [
     "conceptual",
     "cs",
     "curves",
-    "decision",
     "diagnostics",
     "drivers",
     "eda",
@@ -137,6 +137,7 @@ __all__ = [
     "monitor",
     "network",
     "np",
+    "operational",
     "optimize",
     "paginate",
     "paginate_graphql",

@@ -109,13 +109,16 @@ core/        the package (flat layout at the repo root — no src/ wrapper)
                 revenue leakage), risk (VaR/CVaR/drawdown/Sharpe/Sortino/target probabilities),
                 graph (centrality/pagerank/components/paths/MST/max-flow), basket (frequent
                 itemsets + association rules)
-  modeling/     registry (make_model), train (fit/predict/cross-val/partial_fit), tune, ensemble,
-                imbalance, evaluate + compare (+ curves/permutation importance/RFECV/ranking
-                metrics), persist, split, preprocess, segment (clustering/PCA/t-SNE), anomaly,
-                monitor (PSI/KS/label drift + control charts/EWMA early warning), survival
-                (Kaplan-Meier/Cox/RMST), recommend (item-item CF + popularity baseline), checks
-                (monotonicity/bounds/perturbation stability), interpret (counterfactuals,
-                conformal intervals, confidence scores)
+  modeling/     registry (make_model), train (fit/predict/cross-val/partial_fit/score), tune,
+                ensemble, imbalance, evaluate + compare (+ curves/permutation importance/RFECV/
+                ranking metrics/cross-environment transfer), persist, split, preprocess, segment
+                (clustering/PCA/t-SNE), anomaly, monitor (PSI/KS/label drift + control charts/EWMA
+                early warning), survival (Kaplan-Meier/Cox/RMST), recommend (item-item CF +
+                popularity baseline), checks (monotonicity/bounds/perturbation stability),
+                interpret (counterfactuals, conformal intervals, confidence scores)
+  operational/  operational ML / live monitoring: feed readiness (coverage + missing-milestone
+                triage), sequential risk re-scoring at checkpoints, alert engine (risk + lead
+                time → action), alert backtest + intervention ROI
   decision/     contextual bandits (epsilon-greedy, Thompson, UCB, LinUCB) + optimization (LP +
                 shadow prices, MILP/knapsack, nonlinear, assignment, portfolio, Pareto front,
                 stochastic/robust) + scenario (expected utility, scenario & sensitivity analysis)
@@ -131,10 +134,10 @@ core/        the package (flat layout at the repo root — no src/ wrapper)
                 (optimal/markup prices, marginal economics, dynamic-pricing DP)
   kpi/          business KPIs: financial (revenue/economy), behaviour (GA/marketing), profit (cost-sensitive)
   viz/          base.py = @chart decorator + theme + grid; static charts by group:
-                eda (+ fit_overlay), model, cluster, explain, timeseries (+ survival_curve),
-                decision (tornado, waterfall, fan, control chart, Pareto frontier, outcome
-                distribution, price curves, Van Westendorp, policy heatmap), network
-                (force-directed graphs); plus interactive (Plotly, @interactive_chart)
+                eda (+ fit_overlay), model (+ decision_boundary/tree), cluster, explain,
+                timeseries (+ survival_curve), business (tornado, waterfall, fan, control chart,
+                Pareto frontier, outcome distribution, price curves, Van Westendorp, policy
+                heatmap), network (force-directed graphs); plus interactive (Plotly)
   utils/        memory profiling, structured logging, HTML report
 tests/       pytest, mirrors core/
 ```

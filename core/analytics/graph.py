@@ -39,10 +39,12 @@ def _build(
         clean[weight].cast(pl.Float64).to_numpy() if weight is not None else np.ones(clean.height)
     )
     n = len(nodes)
-    matrix = coo_matrix((weights, (rows, cols)), shape=(n, n))
+    matrix = coo_matrix((weights, (rows, cols)), shape=(n, n)).tocsr()
     if not directed:
-        matrix = matrix + matrix.T
-    return matrix.tocsr(), nodes
+        # Mirror with elementwise max, not sum: an edge listed in both directions (the common
+        # "both orientations exported" case) is one undirected edge, so its weight must not double.
+        matrix = matrix.maximum(matrix.T)
+    return matrix, nodes
 
 
 def degree_centrality(

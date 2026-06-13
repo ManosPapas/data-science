@@ -9,7 +9,7 @@ uncertainty actually drives the spread. Risk measures over the result live in ``
 
 from __future__ import annotations
 
-from collections.abc import Callable, Mapping
+from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
 from typing import Any
 
@@ -57,17 +57,27 @@ class SimulationResult:
         """P(outcome < target) — shortfall probability."""
         return float(np.mean(self.samples < target))
 
-    def summary(self, *, targets: ArrayLike | None = None) -> pl.DataFrame:
-        """Headline table: mean, std, P10/P50/P90, and P(≥ target) for each target."""
-        rows = [
+    def summary(
+        self,
+        *,
+        targets: ArrayLike | None = None,
+        quantiles: Sequence[float] = (10, 50, 90),
+    ) -> pl.DataFrame:
+        """Headline table: mean, std, chosen percentiles, and P(≥ target) for each target.
+
+        ``quantiles`` are percentiles (0-100); a scalar ``targets`` is accepted. For the fuller
+        VaR/CVaR view of the same samples use ``analytics.risk.risk_summary``.
+        """
+        rows: list[dict[str, Any]] = [
             {"metric": "mean", "value": self.mean},
             {"metric": "std", "value": self.std},
-            {"metric": "p10", "value": self.p10},
-            {"metric": "p50", "value": self.p50},
-            {"metric": "p90", "value": self.p90},
         ]
-        for target in np.asarray(targets, dtype=float) if targets is not None else []:
-            rows.append({"metric": f"prob ≥ {target:g}", "value": self.prob_above(float(target))})
+        for q in quantiles:
+            rows.append({"metric": f"p{round(q)}", "value": self.percentile(float(q))})
+        if targets is not None:
+            for target in np.atleast_1d(np.asarray(targets, dtype=float)):
+                value = self.prob_above(float(target))
+                rows.append({"metric": f"prob ≥ {target:g}", "value": value})
         return pl.DataFrame(rows)
 
     def drivers(self) -> pl.DataFrame:

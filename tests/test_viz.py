@@ -75,8 +75,8 @@ def test_interactive_charts_return_plotly_figure() -> None:
     assert fig.layout.xaxis.showgrid in (False, None)
 
 
-def test_decision_charts_return_axes(rng: np.random.Generator) -> None:
-    from core.viz import decision
+def test_business_charts_return_axes(rng: np.random.Generator) -> None:
+    from core.viz import business
 
     tornado_table = pl.DataFrame(
         {
@@ -86,15 +86,15 @@ def test_decision_charts_return_axes(rng: np.random.Generator) -> None:
             "swing": [40.0, 9.0],
         }
     )
-    assert isinstance(decision.tornado(tornado_table, base=100.0), Axes)
+    assert isinstance(business.tornado(tornado_table, base=100.0), Axes)
 
     bridge = pl.DataFrame({"effect": ["price", "volume", "mix"], "value": [300.0, -120.0, 80.0]})
-    assert isinstance(decision.waterfall(bridge, label="effect", value="value", start=1000.0), Axes)
+    assert isinstance(business.waterfall(bridge, label="effect", value="value", start=1000.0), Axes)
 
     bands = pl.DataFrame(
         {"period": [0, 1, 2], "p10": [9.0, 8.5, 8.0], "p50": [10.0] * 3, "p90": [11.0, 11.5, 12.0]}
     )
-    assert isinstance(decision.fan(bands, x="period", bands=[("p10", "p90")], line="p50"), Axes)
+    assert isinstance(business.fan(bands, x="period", bands=[("p10", "p90")], line="p50"), Axes)
 
     ewma = pl.DataFrame(
         {
@@ -106,7 +106,7 @@ def test_decision_charts_return_axes(rng: np.random.Generator) -> None:
             "alert": [False, False, False, True],
         }
     )
-    assert isinstance(decision.control_chart(ewma), Axes)
+    assert isinstance(business.control_chart(ewma), Axes)
 
     frontier = pl.DataFrame(
         {
@@ -117,20 +117,20 @@ def test_decision_charts_return_axes(rng: np.random.Generator) -> None:
         }
     )
     assert isinstance(
-        decision.pareto_frontier(
+        business.pareto_frontier(
             frontier, x="margin", y="volume", efficient="efficient", label="config"
         ),
         Axes,
     )
 
     assert isinstance(
-        decision.outcome_distribution(rng.normal(100.0, 10.0, 500), targets=[90.0]), Axes
+        business.outcome_distribution(rng.normal(100.0, 10.0, 500), targets=[90.0]), Axes
     )
 
     schedule = pl.DataFrame(
         {"price": [10.0, 20.0, 30.0], "revenue": [900.0, 1600.0, 2100.0], "profit": [1.0, 2.0, 1.5]}
     )
-    assert isinstance(decision.price_curves(schedule, optimum=20.0), Axes)
+    assert isinstance(business.price_curves(schedule, optimum=20.0), Axes)
 
     vw_curves = pl.DataFrame(
         {
@@ -141,7 +141,7 @@ def test_decision_charts_return_axes(rng: np.random.Generator) -> None:
             "too_expensive": [0.05, 0.3, 0.8],
         }
     )
-    assert isinstance(decision.van_westendorp(vw_curves, points={"optimal": 100.0}), Axes)
+    assert isinstance(business.van_westendorp(vw_curves, points={"optimal": 100.0}), Axes)
 
     policy = pl.DataFrame(
         {
@@ -150,7 +150,7 @@ def test_decision_charts_return_axes(rng: np.random.Generator) -> None:
             "price": [120.0, 100.0, 110.0, 90.0],
         }
     )
-    assert isinstance(decision.price_policy(policy), Axes)
+    assert isinstance(business.price_policy(policy), Axes)
 
 
 def test_network_chart(rng: np.random.Generator) -> None:

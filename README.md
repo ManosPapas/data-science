@@ -39,6 +39,7 @@ type-hinted, tested, and importable in one line from notebooks (`from core.prelu
 | | `modeling.survival` | Kaplan-Meier retention curves, Cox hazard ratios, restricted mean survival (censoring-correct churn) |
 | | `modeling.recommend` | item-item collaborative filtering + popularity baseline |
 | | `modeling.checks` / `interpret` | monotonicity & business-logic validation, perturbation robustness · counterfactual explanations, conformal prediction intervals, confidence scores |
+| **Operate** | `operational` | the model-to-live-process layer: feed-readiness coverage diagnostics, sequential risk re-scoring at checkpoints, an alert engine (risk + lead time → action), alert backtest + intervention ROI; plus `compare.cross_environment` transfer matrices |
 | **Forecast** | `forecasting` | one interface over baselines, ARIMA/SARIMAX, ETS, and ML-reduction; rolling-origin backtest; hierarchical reconciliation (`hierarchy`) |
 | **Decide** | `decision` | contextual bandits (ε-greedy, Thompson, UCB1, LinUCB) · optimization (LP + shadow prices, MILP/knapsack, nonlinear, assignment, portfolio, Pareto fronts, stochastic/robust) · Monte Carlo `simulate` (correlated inputs, stress tests, paths) · `inventory` (newsvendor/EOQ/safety stock) · `capacity` (Erlang C) · `game` (Nash, best-response dynamics) |
 | **Price** | `pricing` | elasticity with CIs, cross-price & segment elasticity, drift monitoring · demand curves, willingness-to-pay, Van Westendorp · market equilibrium, censored-demand unconstraining, saturation, HHI · optimal/markup prices, marginal economics, dynamic-pricing DP |
@@ -114,7 +115,7 @@ Confirm it worked: `python -c "import core; print('ok')"`, then **[run the noteb
 
 ## Example notebooks
 
-Twenty-one end-to-end notebooks under `notebooks/`, each a `load → inspect → analyze → visualize`
+Twenty-two end-to-end notebooks under `notebooks/`, each a `load → inspect → analyze → visualize`
 narrative that delegates every non-trivial step to a tested `core` function:
 
 | Notebook | Demonstrates |
@@ -140,6 +141,7 @@ narrative that delegates every non-trivial step to a tested `core` function:
 | `19_recommendation_basket_graph` | Association rules (confidence vs lift), item-item recommender vs popularity with ranking metrics, co-purchase network (PageRank, communities) |
 | `20_churn_survival_analysis` | Censoring done right: Kaplan-Meier vs naive churn, retention by segment, Cox hazard ratios, RMST → CLV |
 | `21_model_governance_explainability` | Business-rule gates, monotonicity checks (catching a confounded model), perturbation robustness, counterfactual offers, conformal intervals, confidence routing |
+| `22_operational_ml_monitoring` | The model→live-process layer: feed-readiness coverage, sequential risk re-scoring, alert engine (risk + lead time), alert backtest + ROI, cross-environment transfer matrix |
 
 Notebooks **01** and **04** also render a couple of charts with interactive **Plotly**
 (`viz.interactive`) instead of matplotlib — a deliberate mix, to show both options without

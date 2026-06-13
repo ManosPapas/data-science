@@ -2,13 +2,20 @@
 
 What sells together: support (how often), confidence (P(B|A)), and lift (how much more often
 than chance). Drives cross-sell placement, bundling, and the co-purchase graph
-(``analytics.graph``). Apriori pruning keeps it tractable: only items above ``min_support`` can
-appear in larger sets.
+(``analytics.graph``).
+
+Frequent itemsets are mined with Eclat: each itemset carries its *tidset* (the transactions that
+contain it), and a (k+1)-set's tidset is the intersection of two k-sets' tidsets. That keeps the
+work to one transaction scan plus list intersections — no repeated transaction self-joins — so it
+scales to large baskets and arbitrary itemset sizes. Apriori pruning is implicit: only frequent
+k-sets are extended.
 """
 
 from __future__ import annotations
 
 import polars as pl
+
+_PREFIX_SEP = "\x1f"  # unit separator — safe to join item strings on
 
 
 def _transactions(df: pl.DataFrame, transaction: str, item: str) -> tuple[pl.DataFrame, int]:
@@ -19,6 +26,58 @@ def _transactions(df: pl.DataFrame, transaction: str, item: str) -> tuple[pl.Dat
     return base, n_tx
 
 
+def _frequent_levels(
+    base: pl.DataFrame, *, transaction: str, item: str, n_tx: int, min_support: float, max_size: int
+) -> list[pl.DataFrame]:
+    """Eclat per-level frames (``items`` sorted List[str], ``count``, ``support``), k=1..max_size.
+
+    Returns one frame per size with at least one frequent set; empties stop the ladder early.
+    """
+    threshold = min_support * n_tx
+    singles = (
+        base.group_by(item)
+        .agg(pl.col(transaction).unique().alias("_tids"))
+        .with_columns(pl.col("_tids").list.len().alias("count"))
+        .filter(pl.col("count") >= threshold)
+        .with_columns(pl.concat_list(pl.col(item).cast(pl.String)).alias("items"))
+        .select("items", "_tids", "count")
+    )
+    levels = [singles]
+    level = singles
+    k = 1
+    while k < max_size and level.height > 1:
+        joinable = level.with_columns(
+            pl.col("items").list.head(k - 1).list.join(_PREFIX_SEP).alias("_prefix"),
+            pl.col("items").list.last().alias("_last"),
+        )
+        right = joinable.select(
+            "_prefix",
+            pl.col("_last").alias("_last_b"),
+            pl.col("_tids").alias("_tids_b"),
+        )
+        level = (
+            joinable.join(right, on="_prefix")
+            .filter(pl.col("_last") < pl.col("_last_b"))  # each (k+1)-set generated once, sorted
+            .with_columns(
+                pl.concat_list("items", "_last_b").alias("items"),
+                pl.col("_tids").list.set_intersection("_tids_b").alias("_tids"),
+            )
+            .with_columns(pl.col("_tids").list.len().alias("count"))
+            .filter(pl.col("count") >= threshold)
+            .select("items", "_tids", "count")
+        )
+        if level.height == 0:
+            break
+        levels.append(level)
+        k += 1
+    return [
+        frame.with_columns((pl.col("count") / n_tx).alias("support")).select(
+            "items", "count", "support"
+        )
+        for frame in levels
+    ]
+
+
 def frequent_itemsets(
     df: pl.DataFrame,
     *,
@@ -27,77 +86,29 @@ def frequent_itemsets(
     min_support: float = 0.01,
     max_size: int = 3,
 ) -> pl.DataFrame:
-    """Itemsets (size 1-3) appearing in at least ``min_support`` of transactions.
+    """Itemsets of size 1..``max_size`` appearing in at least ``min_support`` of transactions.
 
-    Support = share of transactions containing the whole set. Raise ``min_support`` if the pair
-    join explodes on a long catalogue — rare items can't form frequent sets anyway (apriori).
+    Support = share of transactions containing the whole set. ``max_size`` is a genuine knob
+    (raise it for 4+-item bundles); rare items can't form frequent sets, so the ladder prunes
+    itself. Returns (``items`` sorted List[str], ``size``, ``count``, ``support``).
     """
-    if not 1 <= max_size <= 3:
-        raise ValueError("max_size must be 1, 2, or 3")
+    if max_size < 1:
+        raise ValueError("max_size must be at least 1")
     base, n_tx = _transactions(df, transaction, item)
-
-    singles = (
-        base.group_by(item)
-        .len()
-        .with_columns((pl.col("len") / n_tx).alias("support"))
-        .filter(pl.col("support") >= min_support)
+    levels = _frequent_levels(
+        base,
+        transaction=transaction,
+        item=item,
+        n_tx=n_tx,
+        min_support=min_support,
+        max_size=max_size,
     )
-    frames = [
-        singles.select(
-            pl.concat_list(pl.col(item).cast(pl.String)).alias("items"),
-            pl.lit(1).alias("size"),
-            pl.col("len").alias("count"),
-            "support",
-        )
-    ]
-
-    kept = base.filter(pl.col(item).is_in(singles[item].implode()))
-    if max_size >= 2:
-        pairs = (
-            kept.join(kept, on=transaction, suffix="_b")
-            .filter(pl.col(item) < pl.col(f"{item}_b"))
-            .group_by(item, f"{item}_b")
-            .len()
-            .with_columns((pl.col("len") / n_tx).alias("support"))
-            .filter(pl.col("support") >= min_support)
-        )
-        frames.append(
-            pairs.select(
-                pl.concat_list(
-                    pl.col(item).cast(pl.String), pl.col(f"{item}_b").cast(pl.String)
-                ).alias("items"),
-                pl.lit(2).alias("size"),
-                pl.col("len").alias("count"),
-                "support",
-            )
-        )
-        if max_size >= 3 and pairs.height > 0:
-            # Apriori: a frequent triple's items all sit in some frequent pair.
-            pair_items = pl.concat([pairs[item], pairs[f"{item}_b"].rename(item)]).unique()
-            narrowed = kept.filter(pl.col(item).is_in(pair_items.implode()))
-            triples = (
-                narrowed.join(narrowed, on=transaction, suffix="_b")
-                .filter(pl.col(item) < pl.col(f"{item}_b"))
-                .join(narrowed, on=transaction, suffix="_c")
-                .filter(pl.col(f"{item}_b") < pl.col(f"{item}_c"))
-                .group_by(item, f"{item}_b", f"{item}_c")
-                .len()
-                .with_columns((pl.col("len") / n_tx).alias("support"))
-                .filter(pl.col("support") >= min_support)
-            )
-            frames.append(
-                triples.select(
-                    pl.concat_list(
-                        pl.col(item).cast(pl.String),
-                        pl.col(f"{item}_b").cast(pl.String),
-                        pl.col(f"{item}_c").cast(pl.String),
-                    ).alias("items"),
-                    pl.lit(3).alias("size"),
-                    pl.col("len").alias("count"),
-                    "support",
-                )
-            )
-    return pl.concat(frames).sort(["size", "support"], descending=[False, True])
+    sized = [frame.with_columns(pl.col("items").list.len().alias("size")) for frame in levels]
+    return (
+        pl.concat(sized)
+        .select("items", "size", "count", "support")
+        .sort(["size", "support"], descending=[False, True])
+    )
 
 
 def association_rules(
@@ -113,40 +124,31 @@ def association_rules(
     Confidence = P(consequent | antecedent) — the cross-sell hit rate if you recommend on the
     rule. Lift > 1 = together more often than chance; lift is what separates a real affinity
     from two items that are simply both popular. Leverage is the same gap in absolute share.
+    Shares the frequent-set miner with :func:`frequent_itemsets` (singles + pairs only).
     """
     base, n_tx = _transactions(df, transaction, item)
-    singles = (
-        base.group_by(item)
-        .len()
-        .with_columns((pl.col("len") / n_tx).alias("support"))
-        .filter(pl.col("support") >= min_support)
+    levels = _frequent_levels(
+        base, transaction=transaction, item=item, n_tx=n_tx, min_support=min_support, max_size=2
     )
-    kept = base.filter(pl.col(item).is_in(singles[item].implode()))
-    pairs = (
-        kept.join(kept, on=transaction, suffix="_b")
-        .filter(pl.col(item) < pl.col(f"{item}_b"))
-        .group_by(item, f"{item}_b")
-        .len()
-        .with_columns((pl.col("len") / n_tx).alias("support"))
-        .filter(pl.col("support") >= min_support)
-    )
-    if pairs.is_empty():
+    if len(levels) < 2 or levels[1].is_empty():
         raise ValueError("no frequent pairs at this min_support — lower it or check the data")
 
-    supports = singles.select(pl.col(item).alias("_item"), pl.col("support").alias("_s"))
+    supports = levels[0].select(
+        pl.col("items").list.first().alias("_item"), pl.col("support").alias("_s")
+    )
+    pairs = levels[1].select(
+        pl.col("items").list.get(0).alias("a"),
+        pl.col("items").list.get(1).alias("b"),
+        "support",
+        "count",
+    )
     directed = pl.concat(
         [
             pairs.select(
-                pl.col(item).alias("antecedent"),
-                pl.col(f"{item}_b").alias("consequent"),
-                pl.col("support"),
-                pl.col("len").alias("count"),
+                pl.col("a").alias("antecedent"), pl.col("b").alias("consequent"), "support", "count"
             ),
             pairs.select(
-                pl.col(f"{item}_b").alias("antecedent"),
-                pl.col(item).alias("consequent"),
-                pl.col("support"),
-                pl.col("len").alias("count"),
+                pl.col("b").alias("antecedent"), pl.col("a").alias("consequent"), "support", "count"
             ),
         ]
     )
@@ -163,14 +165,6 @@ def association_rules(
             ),
         )
         .filter(pl.col("confidence") >= min_confidence)
-        .select(
-            "antecedent",
-            "consequent",
-            "count",
-            "support",
-            "confidence",
-            "lift",
-            "leverage",
-        )
+        .select("antecedent", "consequent", "count", "support", "confidence", "lift", "leverage")
     )
     return rules.sort("lift", descending=True)

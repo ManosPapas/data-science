@@ -77,8 +77,11 @@ def price_volume_mix(
             (pl.col("revenue_1") / pl.col("volume_1")).alias("price_1"),
         )
         .with_columns(
-            pl.col("price_0").fill_nan(None),
-            pl.col("price_1").fill_nan(None),
+            # 0/0 → NaN and revenue/0 → ±inf both mean "no real per-unit price here"; null them
+            # so the inheriting fill_null below carries the other period's price (whole
+            # contribution lands in volume/mix), keeping the bridge finite and exactly-summing.
+            pl.when(pl.col("price_0").is_finite()).then(pl.col("price_0")).alias("price_0"),
+            pl.when(pl.col("price_1").is_finite()).then(pl.col("price_1")).alias("price_1"),
         )
         .with_columns(
             pl.col("price_0").fill_null(pl.col("price_1")),

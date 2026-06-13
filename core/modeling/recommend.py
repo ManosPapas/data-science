@@ -15,14 +15,43 @@ import numpy as np
 import polars as pl
 
 
+def _top_k_per_row(matrix: Any, k: int) -> Any:
+    """Keep only the ``k`` largest entries in each CSR row — bounds neighbourhood memory.
+
+    Operates on the sparse data in one pass over the row pointers (O(nnz)), never densifying the
+    full item-by-item matrix, so it stays cheap on large catalogues.
+    """
+    from scipy.sparse import csr_matrix
+
+    rows, cols, data = [], [], []
+    indptr, indices, values = matrix.indptr, matrix.indices, matrix.data
+    for row in range(matrix.shape[0]):
+        start, end = indptr[row], indptr[row + 1]
+        if end - start <= k:
+            keep = range(start, end)
+        else:
+            local = values[start:end]
+            keep = (start + np.argpartition(local, -k)[-k:]).tolist()
+        for j in keep:
+            if values[j] > 0:
+                rows.append(row)
+                cols.append(int(indices[j]))
+                data.append(float(values[j]))
+    return csr_matrix((data, (rows, cols)), shape=matrix.shape)
+
+
 class ItemItemRecommender:
     """Cosine item-item recommender. ``fit`` on interactions, then ``recommend``/``similar_items``.
 
     Implicit feedback (no ``rating`` column) scores every interaction 1. Cold items/users —
     unseen at fit time — get no scores: handle them with a popularity fallback upstream.
+    ``max_similar`` keeps only each item's top-N neighbours in the similarity matrix — leave it
+    ``None`` for exact scores on modest catalogues, set it (e.g. 50) to bound memory when the
+    catalogue is large enough that the dense item-by-item neighbourhood would not fit.
     """
 
-    def __init__(self) -> None:
+    def __init__(self, *, max_similar: int | None = None) -> None:
+        self.max_similar = max_similar
         self._users: list[Any] = []
         self._items: list[Any] = []
         self._user_index: dict[Any, int] = {}
@@ -51,8 +80,13 @@ class ItemItemRecommender:
         norms = np.sqrt(np.asarray(matrix.power(2).sum(axis=0)).ravel())
         norms[norms == 0] = 1.0
         normalized = matrix.multiply(1.0 / norms).tocsc()
-        similarity = (normalized.T @ normalized).tolil()
-        similarity.setdiag(0.0)
+        similarity = (normalized.T @ normalized).tocsr()
+        # zero the self-similarity diagonal without densifying (no LIL round-trip)
+        from scipy.sparse import diags
+
+        similarity = similarity - diags(similarity.diagonal(), shape=similarity.shape)
+        if self.max_similar is not None:
+            similarity = _top_k_per_row(similarity.tocsr(), self.max_similar)
         self._interactions = matrix
         self._similarity = similarity.tocsr()
         return self

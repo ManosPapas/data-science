@@ -120,3 +120,23 @@ def test_ranking_metrics_skips_empty_queries() -> None:
     assert result["queries"] == 1.0
     with pytest.raises(ValueError, match="no query"):
         evaluate.ranking_metrics(np.zeros((1, 3)), np.ones((1, 3)))
+
+
+def test_survival_helpers_reuse_curve(rng: np.random.Generator) -> None:
+    durations, events = _censored_exponential(rng)
+    curve = survival.kaplan_meier(durations, events)
+    # passing the precomputed curve must match recomputing from raw data
+    assert survival.median_survival(durations, events, curve=curve) == pytest.approx(
+        survival.median_survival(durations, events)
+    )
+    assert survival.restricted_mean_survival(durations, events, horizon=12.0, curve=curve) == (
+        pytest.approx(survival.restricted_mean_survival(durations, events, horizon=12.0))
+    )
+
+
+def test_recommender_max_similar_truncates(rng: np.random.Generator) -> None:
+    model = recommend.ItemItemRecommender(max_similar=1).fit(
+        _interactions(), user="user", item="item"
+    )
+    # each item keeps at most one neighbour
+    assert model.similar_items("espresso", k=10).height <= 1

@@ -644,6 +644,11 @@ def fit_discrete(
         loglik = float(np.sum(stats.geom.logpmf(x, **params)))
     elif dist == "nbinom":
         variance = float(x.var(ddof=1)) if x.size > 1 else mean
+        if variance <= mean:
+            # The likelihood is monotone in the dispersion size n (nbinom → Poisson as n → ∞),
+            # so there is no interior MLE — an unbounded bracket search would overflow exp().
+            # Counts that aren't overdispersed are Poisson; say so, so best_discrete skips this.
+            raise ValueError("counts are not overdispersed (variance <= mean) — fit 'poisson'")
 
         def negative_log_likelihood(log_n: float) -> float:
             n = float(np.exp(log_n))
@@ -652,7 +657,7 @@ def fit_discrete(
 
         from scipy.optimize import minimize_scalar
 
-        start = mean**2 / (variance - mean) if variance > mean else 10.0
+        start = mean**2 / (variance - mean)
         result = minimize_scalar(
             negative_log_likelihood,
             bracket=(np.log(max(start, 1e-3)) - 2.0, np.log(max(start, 1e-3)) + 2.0),
@@ -722,8 +727,8 @@ def best_discrete(
     for dist in candidates:
         try:
             fits.append(fit_discrete(data, dist))
-        except ValueError:
-            continue
+        except (ValueError, RuntimeError):
+            continue  # incompatible support, or an optimizer that failed to bracket/converge
     if not fits:
         raise ValueError("no candidate distribution is compatible with the data")
     return pl.DataFrame([{k: v for k, v in fit.items() if k != "params"} for fit in fits]).sort(

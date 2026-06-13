@@ -70,7 +70,7 @@ print(f"point elasticity of revenue curve: {local_e[10]:.2f} (= 1 + e = {1 + e:.
 frame = pl.DataFrame(
     {"price": grid, "revenue": revenue_curve, "profit": profit_curve, "mr": marginal_from_curve}
 )
-decision.price_curves(
+business.price_curves(
     frame,
     curves=("revenue", "profit"),
     optimum=grid_price,

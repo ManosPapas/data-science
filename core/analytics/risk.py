@@ -7,6 +7,9 @@ values where bigger is better (profit, margin), so risk lives in the low quantil
 
 from __future__ import annotations
 
+from collections.abc import Sequence
+from typing import Any
+
 import numpy as np
 import polars as pl
 from numpy.typing import ArrayLike, NDArray
@@ -102,26 +105,29 @@ def sortino_ratio(
 
 
 def risk_summary(
-    outcomes: ArrayLike, *, targets: ArrayLike | None = None, alpha: float = 0.05
+    outcomes: ArrayLike,
+    *,
+    targets: ArrayLike | None = None,
+    alpha: float = 0.05,
+    quantiles: Sequence[float] = (0.05, 0.10, 0.50, 0.90, 0.95),
 ) -> pl.DataFrame:
-    """The one-table risk read: center, spread, P10/P50/P90, VaR/CVaR, target probabilities.
+    """The one-table risk read: center, spread, chosen quantiles, VaR/CVaR, target probabilities.
 
     The standard deck slide for a simulated business case — P50 is the plan, P10 the funding
-    case, ``prob ≥ target`` the commitment you can defend.
+    case, ``prob ≥ target`` the commitment you can defend. ``quantiles`` chooses the percentile
+    rows (e.g. ``(0.25, 0.75)`` for the interquartile case); a scalar ``targets`` is accepted.
     """
     x = _outcomes(outcomes)
-    p5, p10, p50, p90, p95 = np.quantile(x, [0.05, 0.10, 0.50, 0.90, 0.95])
-    rows = [
+    rows: list[dict[str, Any]] = [
         {"metric": "mean", "value": float(x.mean())},
         {"metric": "std", "value": float(x.std(ddof=1)) if x.size > 1 else 0.0},
-        {"metric": "p5", "value": float(p5)},
-        {"metric": "p10", "value": float(p10)},
-        {"metric": "p50", "value": float(p50)},
-        {"metric": "p90", "value": float(p90)},
-        {"metric": "p95", "value": float(p95)},
-        {"metric": f"var_{int((1 - alpha) * 100)}", "value": value_at_risk(x, alpha=alpha)},
-        {"metric": f"cvar_{int((1 - alpha) * 100)}", "value": expected_shortfall(x, alpha=alpha)},
     ]
-    for target in np.asarray(targets, dtype=float) if targets is not None else []:
+    for q in quantiles:
+        rows.append({"metric": f"p{round(q * 100)}", "value": float(np.quantile(x, q))})
+    rows.append({"metric": f"var_{int((1 - alpha) * 100)}", "value": value_at_risk(x, alpha=alpha)})
+    rows.append(
+        {"metric": f"cvar_{int((1 - alpha) * 100)}", "value": expected_shortfall(x, alpha=alpha)}
+    )
+    for target in np.atleast_1d(np.asarray(targets, dtype=float)) if targets is not None else []:
         rows.append({"metric": f"prob ≥ {target:g}", "value": probability_above(x, float(target))})
     return pl.DataFrame(rows)

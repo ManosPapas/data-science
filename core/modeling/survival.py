@@ -59,9 +59,8 @@ def kaplan_meier(
     )
 
 
-def survival_at(durations: ArrayLike, events: ArrayLike, times: ArrayLike) -> NDArray[np.float64]:
-    """S(t) read off the Kaplan-Meier curve at the requested times (step interpolation)."""
-    curve = kaplan_meier(durations, events)
+def _survival_at_curve(curve: pl.DataFrame, times: ArrayLike) -> NDArray[np.float64]:
+    """S(t) at ``times`` from an already-computed KM ``curve`` (step interpolation, no re-fit)."""
     knots = curve["time"].to_numpy()
     values = curve["survival"].to_numpy()
     query = np.asarray(times, dtype=float)
@@ -69,32 +68,53 @@ def survival_at(durations: ArrayLike, events: ArrayLike, times: ArrayLike) -> ND
     return np.asarray(np.where(idx < 0, 1.0, values[np.clip(idx, 0, values.size - 1)]), dtype=float)
 
 
-def median_survival(durations: ArrayLike, events: ArrayLike) -> float:
+def survival_at(
+    durations: ArrayLike,
+    events: ArrayLike,
+    times: ArrayLike,
+    *,
+    curve: pl.DataFrame | None = None,
+) -> NDArray[np.float64]:
+    """S(t) read off the Kaplan-Meier curve at the requested times (step interpolation).
+
+    Pass a ``curve`` from :func:`kaplan_meier` to skip re-fitting when you already have it.
+    """
+    curve = curve if curve is not None else kaplan_meier(durations, events)
+    return _survival_at_curve(curve, times)
+
+
+def median_survival(
+    durations: ArrayLike, events: ArrayLike, *, curve: pl.DataFrame | None = None
+) -> float:
     """First time the survival curve crosses 0.5 — typical lifetime; NaN if it never does.
 
     Prefer this to mean tenure when churn is skewed (it always is); NaN itself is informative:
-    most of the base outlives the observation window.
+    most of the base outlives the observation window. Pass a precomputed ``curve`` to skip the fit.
     """
-    curve = kaplan_meier(durations, events)
+    curve = curve if curve is not None else kaplan_meier(durations, events)
     below = curve.filter(pl.col("survival") <= 0.5)
     return float(below["time"][0]) if below.height else float("nan")
 
 
 def restricted_mean_survival(
-    durations: ArrayLike, events: ArrayLike, *, horizon: float | None = None
+    durations: ArrayLike,
+    events: ArrayLike,
+    *,
+    horizon: float | None = None,
+    curve: pl.DataFrame | None = None,
 ) -> float:
     """Expected survival time up to ``horizon`` — area under the KM curve (RMST).
 
     The CLV-ready number: expected retained periods per customer over the horizon; multiply by
     margin per period. Always estimable (unlike the unrestricted mean under censoring) and the
-    honest way to compare retention between cohorts.
+    honest way to compare retention between cohorts. Fits the curve once (or reuses the ``curve``
+    you pass — do that when computing several summaries per cohort).
     """
-    curve = kaplan_meier(durations, events)
+    curve = curve if curve is not None else kaplan_meier(durations, events)
     knots = curve["time"].to_numpy()
     limit = float(horizon) if horizon is not None else float(knots.max())
-    grid = np.concatenate([[0.0], knots[knots <= limit], [limit]])
-    grid = np.unique(grid)
-    steps = survival_at(durations, events, grid[:-1])  # S is right-continuous: left value rules
+    grid = np.unique(np.concatenate([[0.0], knots[knots <= limit], [limit]]))
+    steps = _survival_at_curve(curve, grid[:-1])  # S is right-continuous: left value rules
     return float(np.sum(steps * np.diff(grid)))
 
 

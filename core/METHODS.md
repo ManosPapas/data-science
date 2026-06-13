@@ -482,6 +482,29 @@ Probe the fitted model like a domain reviewer would; data-side rules → `valida
 (timestamp + metrics/params you pass). Reproducibility: persist the seed and metrics with the
 artifact.
 
+### modeling.compare.cross_environment — does the model generalize across regimes?
+
+| Function | Use when | Statistical reading |
+|---|---|---|
+| `cross_environment(make_model, environments, scoring=)` | Will it transfer to a new segment/period/region? | Trains a fresh model on each environment, scores it on every other → long (train, test, score) matrix. The diagonal is in-domain, off-diagonal is transfer; a model strong at home and weak away is overfit to a regime — read the row spread, not one number, before rollout |
+
+---
+
+## operational — operational ML / live monitoring
+
+The layer between a fitted model and a live process (events, milestones, custody checkpoints).
+Generic over any checkpointed operational process (deliveries, claims, loans, clinical pathways);
+exposed as the ``operational`` namespace.
+
+| Function | Use when | What it tells you |
+|---|---|---|
+| `feed_readiness(df, entity=, milestone=, expected=, timestamp=)` | Before scoring against a live feed | Per-milestone coverage (share of entities with it) + recency; `expected` surfaces milestones that never arrive (coverage 0). The go/no-go gate: a model needing a 5%-coverage signal can't score live yet |
+| `entities_missing(df, entity=, milestone=, required=)` | Triage incomplete entities | One row per entity short of a required milestone, with the `missing` list — chase the feed or hold the score before running on incomplete custody |
+| `rescore_sequence(model, snapshots, feature_columns=, id_column=)` | Risk evolves as state arrives | Scores one fitted model on a sequence of progressively richer per-checkpoint snapshots → the risk *trajectory* per entity (the rising-toward-deadline ones are the ones to act on). Snapshots must be leak-free |
+| `generate_alerts(df, score=, bands=, lead_time=, min_lead=)` | Turn risk into an action | Band ladder maps score → action by severity; the lead-time gate downgrades anything past the point of no return (`too_late`) — the distinction between "act" and "too late to act" that makes an alert operational |
+| `alert_metrics(alerted, event, lead_time=)` | Backtest an alerting system | Detection rate (recall — the costly miss), precision (false-alarm cost), and mean lead time on detected events (an alert too late to act on isn't a catch) |
+| `intervention_roi(events_detected=, value_per_prevented=, prevention_rate=, interventions=, cost_per_intervention=)` | Prove it paid | Prevented losses minus intervention cost → benefit/cost/net/ROI; every input is a number you must justify (the cost model stays explicit, not a buried placeholder) |
+
 ---
 
 ## decision.bandits — learn *while* deciding
@@ -755,15 +778,15 @@ All `@chart` functions: pass prepared data, get an `Axes` (multi-panel ones retu
 | `timeseries.seasonal_decomposition` | Trend / seasonal / residual split |
 | `timeseries.forecast` / `timeseries.forecast_residuals` | Forecast vs actual with interval band; residual whiteness over time (test: `diagnostics.ljung_box`) |
 | `timeseries.survival_curve` | Kaplan-Meier step curve(s) with CI bands, `{label: frame}` overlays segments — retention compared the censoring-correct way |
-| `decision.tornado` | `scenario.sensitivity` as the tornado: biggest lever on top, bars spanning low→high outcome, base line as the pivot |
-| `decision.waterfall` | The finance bridge: named contributions as floating bars (`change_decomposition`, summed `price_volume_mix`), gains/losses coloured apart, closing total |
-| `decision.fan` | Shaded quantile bands + center line — one chart for `path_percentiles` fans, rolling-elasticity CIs, conformal intervals |
-| `decision.control_chart` | `monitor.ewma_alerts` drawn: raw points, EWMA vs widening limits, alerts highlighted — the early-warning picture |
-| `decision.pareto_frontier` | Options scattered, the efficient set traced and labelled — the trade-off menu from `optimize.pareto_front` |
-| `decision.outcome_distribution` | Monte Carlo outcomes annotated with P10/P50/P90 and target lines — the deck version of a histogram |
-| `decision.price_curves` | Revenue/profit (any response) vs price with the recommended optimum marked |
-| `decision.van_westendorp` | The four survey curves with the crossing points (optimal / range bounds) marked |
-| `decision.price_policy` | Dynamic-pricing policy heatmap (period × remaining stock → price): markdown toward the deadline, scarcity premium toward the stock-out corner |
+| `business.tornado` | `scenario.sensitivity` as the tornado: biggest lever on top, bars spanning low→high outcome, base line as the pivot |
+| `business.waterfall` | The finance bridge: named contributions as floating bars (`change_decomposition`, summed `price_volume_mix`), gains/losses coloured apart, closing total |
+| `business.fan` | Shaded quantile bands + center line — one chart for `path_percentiles` fans, rolling-elasticity CIs, conformal intervals |
+| `business.control_chart` | `monitor.ewma_alerts` drawn: raw points, EWMA vs widening limits, alerts highlighted — the early-warning picture |
+| `business.pareto_frontier` | Options scattered, the efficient set traced and labelled — the trade-off menu from `optimize.pareto_front` |
+| `business.outcome_distribution` | Monte Carlo outcomes annotated with P10/P50/P90 and target lines — the deck version of a histogram |
+| `business.price_curves` | Revenue/profit (any response) vs price with the recommended optimum marked |
+| `business.van_westendorp` | The four survey curves with the crossing points (optimal / range bounds) marked |
+| `business.price_policy` | Dynamic-pricing policy heatmap (period × remaining stock → price): markdown toward the deadline, scarcity premium toward the stock-out corner |
 | `network.network` | Edge list as a force-directed graph (no networkx): node size = degree, edge width = weight; hubs central, communities clustered. Qualitative — read exact structure off `analytics.graph` tables; filter big edge lists first |
 | `conceptual.dag(edges)` | Causal DAG from (cause, effect) pairs — pick the adjustment set: block backdoor paths (confounders), don't condition on colliders or mediators |
 | `conceptual.gini_vs_entropy` / `conceptual.bias_variance` | Teaching sketches (impurity criteria, error decomposition) — functions of a parameter, not data |
@@ -816,6 +839,11 @@ All `@chart` functions: pass prepared data, get an `Axes` (multi-panel ones retu
 | Change-point detection | `diagnostics.change_points` |
 | Forecast error metrics | `backtest.mae` / `rmse` / `mape` / `smape`, computed on `rolling_origin` backtests |
 | Drift (covariate/label/concept) | `monitor.psi`/`ks_drift` (covariate), `monitor.label_drift` (prior), score-drift via `drift_report` + delayed-label re-evaluation (concept) |
+| Data / feed readiness before scoring live | `operational.feed_readiness` / `entities_missing` |
+| Sequential / live risk re-scoring at checkpoints | `operational.rescore_sequence` |
+| Alerting (risk + lead time → action) | `operational.generate_alerts` |
+| Alert backtest & intervention ROI | `operational.alert_metrics` / `intervention_roi` |
+| Cross-environment / does-it-generalize check | `modeling.compare.cross_environment` |
 | A/B design, SRM, power, peeking | `stats.sample_size_*`/`power`, `experiment.srm_check`, `experiment.msprt_means`, `experiment.cuped_adjust` |
 | Correlation vs causation; confounders | `analytics.causal` (matching, IPW, DiD, IV); stratify via `subgroup_effects`; draw the graph with `viz.conceptual.dag` |
 | RCTs / A/B as gold standard | `analytics.experiment` end-to-end: `stats.sample_size_*` → `srm_check` → `analyze_*` / `bayes_*`; the causal tools exist for when you *can't* randomize |

@@ -169,7 +169,10 @@ def gradient(
     if names is not None:
         keys = names
     else:
-        keys = [k for k, v in base.items() if isinstance(v, int | float)]
+        # bool is a subclass of int — exclude flags, which have no meaningful derivative.
+        keys = [
+            k for k, v in base.items() if isinstance(v, int | float) and not isinstance(v, bool)
+        ]
     return {name: marginal_effect(fn, base, name) for name in keys}
 
 

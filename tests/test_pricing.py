@@ -269,3 +269,19 @@ def test_dynamic_prices_scarcity_logic() -> None:
     # scarcer stock should never be priced lower at the same point in time
     assert np.all(np.diff(policy.prices[0, 1:]) <= 1e-9)
     assert policy.policy_frame().height == 5 * 21
+
+
+def test_segment_elasticity_skips_null_segment(rng: np.random.Generator) -> None:
+    # a segment carrying a null quantity must be skipped, not crash the whole loop
+    good = _loglog_data(rng, elasticity_true=-2.0, n=200)
+    frames = [
+        pl.DataFrame({"price": good[0], "quantity": good[1], "segment": "clean"}),
+        pl.DataFrame(
+            {"price": [10.0, 20.0, 30.0], "quantity": [5.0, None, 3.0], "segment": "dirty"}
+        ),
+    ]
+    table = elasticity.segment_elasticity(
+        pl.concat(frames), price="price", quantity="quantity", segment="segment"
+    )
+    assert "clean" in table["segment"].to_list()
+    assert "dirty" not in table["segment"].to_list()

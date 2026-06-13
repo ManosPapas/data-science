@@ -140,7 +140,7 @@ configs = pl.DataFrame(
 on_front = optimize.pareto_front(configs.select("margin", "volume").to_numpy(), maximize=True)
 frontier = configs.with_columns(pl.Series("efficient", on_front))
 print(frontier.sort("efficient", descending=True))
-decision.pareto_frontier(
+business.pareto_frontier(
     frontier,
     x="margin",
     y="volume",

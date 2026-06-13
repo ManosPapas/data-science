@@ -15,16 +15,8 @@ from typing import Any
 
 import numpy as np
 import polars as pl
-from numpy.typing import NDArray
 
-from core.modeling.train import predict, predict_proba
-
-
-def _score(model: Any, x: pl.DataFrame) -> NDArray[np.float64]:
-    """Positive-class probability for classifiers, plain prediction otherwise."""
-    if hasattr(model, "predict_proba"):
-        return np.asarray(predict_proba(model, x)[:, 1], dtype=float)
-    return np.asarray(predict(model, x), dtype=float)
+from core.modeling.train import score as _score
 
 
 def _sample(x: pl.DataFrame, n_rows: int, seed: int) -> pl.DataFrame:

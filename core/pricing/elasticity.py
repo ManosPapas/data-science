@@ -24,6 +24,11 @@ def _validate_loglog(
 ) -> tuple[NDArray[np.float64], NDArray[np.float64]]:
     p = np.asarray(price, dtype=float)
     q = np.asarray(quantity, dtype=float)
+    # NaN slips past `<= 0` (every comparison with NaN is False), so reject non-finite first —
+    # otherwise nulls flow into log/lstsq and raise a LinAlgError the segment/rolling loops,
+    # which only catch ValueError, would not survive.
+    if not (np.all(np.isfinite(p)) and np.all(np.isfinite(q))):
+        raise ValueError("log-log demand requires finite price and quantity (drop nulls/NaNs)")
     if np.any(p <= 0) or np.any(q <= 0):
         raise ValueError("log-log demand requires strictly positive price and quantity")
     if np.unique(p).size < 2:
@@ -34,7 +39,14 @@ def _validate_loglog(
 def _ols(
     design: NDArray[np.float64], y: NDArray[np.float64]
 ) -> tuple[NDArray[np.float64], NDArray[np.float64], NDArray[np.float64], int]:
-    """OLS for a full-rank design; returns (coef, std_err, residuals, dof)."""
+    """OLS for a full-rank design; returns (coef, std_err, residuals, dof).
+
+    A deliberate self-contained numpy kernel, not a duplicate of ``analytics.regression.ols_fit``:
+    this runs inside tight rolling-window / per-segment loops where building a polars frame and
+    invoking statsmodels per fit would dominate the cost. For a single rich inference read
+    (diagnostics, robust SEs) on one dataset, use ``analytics.regression.ols_fit`` instead — same
+    textbook estimator, different ergonomics.
+    """
     n, k = design.shape
     if n <= k:
         raise ValueError(f"need more than {k} observations, got {n}")

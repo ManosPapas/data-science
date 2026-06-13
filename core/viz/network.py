@@ -63,21 +63,24 @@ def network(
     labels: bool = True,
     iterations: int = 120,
     seed: int = 42,
+    max_nodes: int = MAX_NODES,
 ) -> None:
     """Draw an edge list as a spring-layout graph: hubs central, communities clustered.
 
     Node size encodes degree, edge width encodes ``weight``. The layout is qualitative —
     distances are suggestive, not measurements (read exact structure off ``analytics.graph``
-    tables); fix ``seed`` for a reproducible picture.
+    tables); fix ``seed`` for a reproducible picture. ``max_nodes`` guards legibility — raise it
+    deliberately for a large-format export rather than relying on the default.
     """
     from matplotlib.collections import LineCollection
 
     clean = edges.drop_nulls([source, target])
     nodes = pl.concat([clean[source], clean[target].rename(source)]).unique(maintain_order=True)
     names = nodes.to_list()
-    if len(names) > MAX_NODES:
+    if len(names) > max_nodes:
         raise ValueError(
-            f"{len(names)} nodes won't draw legibly — filter the edge list below {MAX_NODES}"
+            f"{len(names)} nodes won't draw legibly — filter the edge list or raise max_nodes "
+            f"(currently {max_nodes})"
         )
     index = {name: i for i, name in enumerate(names)}
     edge_index = np.array(

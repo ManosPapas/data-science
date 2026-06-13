@@ -106,3 +106,47 @@ def test_association_rules_raise_without_pairs() -> None:
     lonely = pl.DataFrame({"order": [1, 2], "item": ["a", "b"]})
     with pytest.raises(ValueError, match="no frequent pairs"):
         basket.association_rules(lonely, transaction="order", item="item")
+
+
+# --- Review-fix regression tests ----------------------------------------------------------------
+
+
+def test_frequent_itemsets_arbitrary_max_size() -> None:
+    # max_size is now a real knob (was hard-capped at 3): a 4-item bundle must surface
+    rows = []
+    for tx in range(50):
+        for it in ["a", "b", "c", "d"]:  # all four in every basket
+            rows.append({"order": tx, "item": it})
+    df = pl.DataFrame(rows)
+    sets = basket.frequent_itemsets(
+        df, transaction="order", item="item", min_support=0.5, max_size=4
+    )
+    assert 4 in sets["size"].to_list()
+    quad = sets.filter(pl.col("size") == 4)
+    assert quad["support"][0] == pytest.approx(1.0)
+
+
+def test_itemset_and_rule_supports_agree() -> None:
+    # shared frequent-set miner → pair support in both APIs must match exactly
+    df = _baskets()
+    itemsets = basket.frequent_itemsets(df, transaction="order", item="item", min_support=0.05)
+    rules = basket.association_rules(
+        df, transaction="order", item="item", min_support=0.05, min_confidence=0.0
+    )
+    pair = itemsets.filter(
+        (pl.col("size") == 2)
+        & pl.col("items").list.contains("bread")
+        & pl.col("items").list.contains("butter")
+    )
+    rule = rules.filter((pl.col("antecedent") == "butter") & (pl.col("consequent") == "bread"))
+    assert rule["support"][0] == pytest.approx(pair["support"][0])
+
+
+def test_undirected_weight_not_doubled_on_both_orientations() -> None:
+    # an edge listed in both directions is one undirected edge — weight must not double
+    edges = pl.DataFrame(
+        {"source": ["a", "b", "a"], "target": ["b", "a", "c"], "w": [3.0, 3.0, 4.0]}
+    )
+    deg = graph.degree_centrality(edges, weight="w")
+    a_weight = deg.filter(pl.col("node") == "a")["weighted_degree"][0]
+    assert a_weight == pytest.approx(7.0)  # 3 (a-b, once) + 4 (a-c), not 10

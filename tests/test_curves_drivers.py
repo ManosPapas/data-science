@@ -142,3 +142,22 @@ def test_revenue_leakage_ranks_leaks() -> None:
     assert table["leakage_rate"][0] == pytest.approx(0.275)
     total = drivers.revenue_leakage(df, expected="list_price", actual="realized")
     assert total["leakage"][0] == pytest.approx(60.0)
+
+
+def test_gradient_skips_boolean_flags() -> None:
+    def value(price: float, promo: bool) -> float:
+        return price * (1.5 if promo else 1.0)
+
+    grad = curves.gradient(value, {"price": 10.0, "promo": True})
+    assert "promo" not in grad  # bool is not a differentiable input
+    assert "price" in grad
+
+
+def test_price_volume_mix_survives_zero_net_volume() -> None:
+    # a segment whose volume nets to zero with nonzero revenue (credits) → no inf in the bridge
+    baseline = pl.DataFrame(
+        {"s": ["a", "a", "b"], "price": [10.0, 10.0, 20.0], "volume": [5.0, -5.0, 100.0]}
+    )
+    current = pl.DataFrame({"s": ["a", "b"], "price": [11.0, 22.0], "volume": [50.0, 110.0]})
+    bridge = drivers.price_volume_mix(current, baseline, price="price", volume="volume", by="s")
+    assert np.isfinite(bridge["total_effect"].to_numpy()).all()

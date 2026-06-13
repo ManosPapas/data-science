@@ -148,3 +148,25 @@ def test_risk_summary_table(rng: np.random.Generator) -> None:
     assert metrics["prob ≥ 90"] > 0.8
     assert "var_95" in metrics
     assert "cvar_95" in metrics
+
+
+# --- Regression tests for code-review fixes -----------------------------------------------------
+
+
+def test_risk_summary_accepts_scalar_target_and_quantiles(rng: np.random.Generator) -> None:
+    outcomes = rng.normal(100.0, 10.0, 2000)
+    table = risk.risk_summary(outcomes, targets=90.0)  # scalar, was a TypeError
+    assert "prob ≥ 90" in table["metric"].to_list()
+    iqr = risk.risk_summary(outcomes, quantiles=(0.25, 0.75))
+    assert {"p25", "p75"} <= set(iqr["metric"].to_list())
+    assert "p50" not in iqr["metric"].to_list()
+
+
+def test_simulation_summary_scalar_target_and_quantiles() -> None:
+    from scipy import stats as sps
+
+    result = simulate.monte_carlo(lambda a: a, {"a": sps.norm(0.0, 1.0)}, n=2000)
+    table = result.summary(targets=0.0, quantiles=(5, 50, 95))
+    metrics = table["metric"].to_list()
+    assert {"p5", "p50", "p95"} <= set(metrics)
+    assert "prob ≥ 0" in metrics

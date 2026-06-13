@@ -7,7 +7,7 @@ approaches 1, so "run everything at 95%" is a queueing disaster, not an efficien
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 import numpy as np
 
@@ -22,16 +22,17 @@ class QueueMetrics:
     average_wait: float
     average_queue: float
 
+    # The arrival/service rates the SLA formula needs; required (no defaults) so a hand-built
+    # QueueMetrics can't silently report decay=0, and repr=False keeps them out of the printout.
+    arrival_rate: float = field(repr=False)
+    service_rate: float = field(repr=False)
+
     def service_level(self, answer_within: float) -> float:
         """P(wait ≤ t): the '80% answered in 20s' style SLA number."""
         if answer_within < 0:
             raise ValueError("answer_within must be non-negative")
-        decay = self.servers * self._service_rate - self._arrival_rate
+        decay = self.servers * self.service_rate - self.arrival_rate
         return 1.0 - self.wait_probability * float(np.exp(-decay * answer_within))
-
-    # set in erlang_c; kept private so the dataclass prints clean
-    _arrival_rate: float = 0.0
-    _service_rate: float = 0.0
 
 
 def erlang_c(*, arrival_rate: float, service_rate: float, servers: int) -> QueueMetrics:
@@ -61,8 +62,8 @@ def erlang_c(*, arrival_rate: float, service_rate: float, servers: int) -> Queue
         wait_probability=float(wait_probability),
         average_wait=float(average_wait),
         average_queue=float(average_queue),
-        _arrival_rate=float(arrival_rate),
-        _service_rate=float(service_rate),
+        arrival_rate=float(arrival_rate),
+        service_rate=float(service_rate),
     )
 
 

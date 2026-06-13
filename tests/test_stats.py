@@ -210,3 +210,16 @@ def test_best_distribution_skips_incompatible(rng: np.random.Generator) -> None:
 
     ranked = stats.best_distribution(rng.normal(10.0, 2.0, 500), candidates=("norm", "poisson"))
     assert ranked["dist"].to_list() == ["norm"]  # discrete name skipped, not fatal
+
+
+def test_best_discrete_survives_underdispersed(rng: np.random.Generator) -> None:
+    import pytest
+
+    from core.analytics import stats
+
+    # equidispersed/underdispersed counts have no interior nbinom MLE — must not crash
+    constant_ish = np.full(500, 4) + rng.integers(0, 2, 500)  # variance << mean
+    ranked = stats.best_discrete(constant_ish)
+    assert ranked.height >= 1  # poisson/binom survive, nbinom is skipped cleanly
+    with pytest.raises(ValueError, match="not overdispersed"):
+        stats.fit_discrete(constant_ish, "nbinom")

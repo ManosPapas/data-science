@@ -98,3 +98,13 @@ def test_required_servers_meets_target() -> None:
 def test_required_servers_needs_exactly_one_target() -> None:
     with pytest.raises(ValueError, match="exactly one"):
         capacity.required_servers(arrival_rate=1.0, service_rate=2.0)
+
+
+def test_queue_metrics_requires_rates() -> None:
+    import pytest
+
+    # the SLA-formula rates are now required — a hand-built QueueMetrics can't silently omit them
+    with pytest.raises(TypeError):
+        capacity.QueueMetrics(
+            servers=3, utilization=0.5, wait_probability=0.2, average_wait=0.1, average_queue=0.3
+        )
