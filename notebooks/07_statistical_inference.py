@@ -29,12 +29,14 @@ stats.summary(customers)
 # %% [markdown]
 # ## 1. What shape is monthly spend? (distributions & MLE)
 # Heavily right-skewed — the mean alone misleads. `best_distribution` fits candidate families by
-# maximum likelihood and ranks them by AIC; the KS column scores absolute goodness of fit
-# (best-of-a-bad-bunch is still bad).
+# maximum likelihood and ranks them by AIC; it also reports **BIC** (the heavier, n-scaled penalty
+# ≈ minimum description length — it prefers simpler families as data grows). When AIC and BIC agree
+# on the winner the choice is robust; the KS column scores absolute fit (best-of-a-bad-bunch is
+# still bad).
 
 # %%
 print(stats.describe_distribution(spend))
-stats.best_distribution(spend, candidates=("norm", "lognorm", "gamma", "expon"))
+stats.best_distribution(spend, candidates=("norm", "lognorm", "gamma", "expon", "weibull_min"))
 
 # %%
 fig, axes = base.grid(2)
@@ -123,15 +125,90 @@ stats.group_summary(customers.drop_nulls("monthly_spend"), value="monthly_spend"
 print(stats.chi_square(customers["plan"].to_numpy(), customers["churned"].to_numpy()))
 
 # %% [markdown]
-# ## 4. Pearson vs Spearman — linear vs monotonic
-# A deliberately curved (but perfectly monotonic) relationship: Pearson under-reads it, Spearman
-# nails it. When the two disagree on real data, plot the pair before trusting either.
+# ## 3b. The rest of the test battery — pick the test by the question
+# One-sample (mean vs a target), exact (small 2x2 where chi-square's >=5 rule fails),
+# goodness-of-fit (does a category mix match an expectation?), and the *paired/repeated* tests for
+# the same units measured more than once. Reaching for the right one is the skill; the wrong test
+# on the right data is still the wrong answer.
 
 # %%
+# One-sample: is mean satisfaction different from the 7.0 target the CX team commits to?
+satisfaction = customers["satisfaction"].drop_nulls().to_numpy()
+print(f"one-sample t (vs 7.0)   {stats.one_sample_t_test(satisfaction, 7.0)}")
+
+# Goodness-of-fit: is the region mix uniform, or skewed toward some regions?
+region_counts = customers["region"].value_counts(sort=True)["count"].to_numpy()
+print(f"chi-square GOF (uniform){stats.chi_square_gof(region_counts)}")
+
+# Fisher's exact: a rare-cell 2x2 (a tiny pilot cohort) where chi-square is untrustworthy
+pilot = [[8, 2], [3, 20]]  # converted/not by arm, small n
+print(f"fisher's exact          {stats.fishers_exact(pilot)}  (statistic = odds ratio)")
+
+# %%
+# Paired / repeated measures: the SAME customers surveyed under three onboarding variants.
+# Friedman = the non-parametric repeated-measures ANOVA; Wilcoxon signed-rank = its paired case.
+base_score = rng.normal(6.5, 1.2, 200)
+variant_a = base_score + rng.normal(0.0, 0.4, 200)  # ~ no change
+variant_b = base_score + 0.6 + rng.normal(0.0, 0.4, 200)  # a real lift
+variant_c = base_score + 1.1 + rng.normal(0.0, 0.4, 200)  # a bigger lift
+print(f"friedman (3 variants)   {stats.friedman_test(variant_a, variant_b, variant_c)}")
+print(f"wilcoxon (a vs c)       {stats.wilcoxon_signed_rank(variant_a, variant_c)}")
+
+# %% [markdown]
+# ## 4. Correlation — pick the coefficient by the variable types
+# Pearson is the *wrong* default for anything but two continuous, linear variables. The right
+# coefficient depends on the pair of types — `correlation_kind` is the chooser, and the suite
+# below covers each case on real customer columns.
+
+# %%
+# Continuous ↔ continuous, but curved: Pearson under-reads a monotonic relationship; Spearman and
+# Kendall (rank-based, robust to the curve and to ties) nail it.
 curved_x = rng.uniform(1.0, 10.0, 300)
 curved_y = curved_x**4 + rng.normal(0.0, 80.0, 300)
-print(f"pearson  {stats.correlation_test(curved_x, curved_y, method='pearson')}")
-print(f"spearman {stats.correlation_test(curved_x, curved_y, method='spearman')}")
+for method in ("pearson", "spearman", "kendall"):
+    print(f"{method:9s} {stats.correlation_test(curved_x, curved_y, method=method)}")
+
+# %%
+# The chooser maps variable types -> the right function, so the call site is never guesswork.
+for x_kind, y_kind in [
+    ("continuous", "continuous"),
+    ("binary", "continuous"),
+    ("nominal", "nominal"),
+    ("binary", "binary"),
+    ("ordinal", "continuous"),
+]:
+    print(f"{x_kind:11s} x {y_kind:11s} -> {stats.correlation_kind(x_kind, y_kind)}")
+
+# %%
+# Binary vs continuous: does churn (0/1) relate to monthly spend? -> point-biserial.
+churned = customers["churned"].to_numpy()
+spend_filled = customers["monthly_spend"].fill_null(strategy="mean").to_numpy()
+print(f"point-biserial (churn vs spend)  {stats.point_biserial(churned, spend_filled)}")
+
+# Categorical vs categorical: plan-region association magnitude -> Cramér's V (+ chi-square p).
+cramers = stats.cramers_v(customers["plan"].to_numpy(), customers["region"].to_numpy())
+print(f"Cramer's V  (plan vs region)     {cramers:.3f}")
+
+# Binary vs binary: churn vs is-premium -> phi (signed).
+is_premium = (customers["plan"] == "premium").cast(pl.Int8).to_numpy()
+print(f"phi         (churn vs is_premium) {stats.phi_coefficient(churned, is_premium):+.3f}")
+
+# %%
+# Partial correlation: spend and sessions look related — but tenure drives both. Control for it.
+raw = stats.correlation_test(
+    customers["monthly_spend"].fill_null(strategy="mean").to_numpy(),
+    customers["sessions_30d"].to_numpy(),
+)
+partial = stats.partial_correlation(
+    customers.with_columns(pl.col("monthly_spend").fill_null(strategy="mean")),
+    x="monthly_spend",
+    y="sessions_30d",
+    covariates=["tenure_months"],
+)
+print(
+    f"spend vs sessions  raw r={raw.statistic:+.3f}   "
+    f"partial (control tenure) r={partial.statistic:+.3f}"
+)
 
 # %% [markdown]
 # ## 5. Power — design before you test
@@ -243,9 +320,12 @@ numeric_drivers = [
 stats.mutual_information(customers.select(numeric_drivers), "churned", task="classification")
 
 # %% [markdown]
-# **Takeaways:** spend is gamma-like — quote medians/p90s with bootstrap intervals and use the
-# fitted gamma for tail probabilities; the premium-vs-basic gap is large (d ≈ 2, plan explains
-# ~a third of spend variance) and survives all three tests; spend missingness looks MCAR, so
-# simple imputation is safe; pooled slopes need a Simpson's check before they reach a slide; and
-# tenure/tickets/satisfaction carry the most information about churn — the shortlist the
-# regression notebook (08) quantifies with confidence intervals.
+# **Takeaways:** spend is gamma-like (AIC and BIC agree) — quote medians/p90s with bootstrap
+# intervals and use the fitted gamma for tail probabilities; the premium-vs-basic gap is large
+# (d ≈ 2, plan explains ~a third of spend variance) and survives all three tests; the test you
+# reach for is set by the question (one-sample vs target, Fisher for tiny cells, Friedman/Wilcoxon
+# for repeated measures); correlation coefficient is set by the *variable types* — point-biserial,
+# Cramér's V, phi, and a partial correlation each answer a different pair, and Pearson is the wrong
+# default for most of them; spend missingness looks MCAR, so simple imputation is safe; pooled
+# slopes need a Simpson's check; and tenure/tickets/satisfaction carry the most information about
+# churn — the shortlist notebook 08 quantifies with confidence intervals.

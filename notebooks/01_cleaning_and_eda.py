@@ -148,11 +148,35 @@ eda.histogram(compact["unit_price"].to_numpy(), ax=axes[1], title="Unit price")
 eda.ecdf(compact["revenue"].to_numpy(), ax=axes[2], title="Revenue ECDF")
 
 # %%
+# Two ways to tame the skew, in increasing order of reach. log(1+x) is the quick, stateless move
+# (`transform.log1p`). A *fitted* power transform (Yeo-Johnson / Box-Cox) learns the exponent that
+# makes the column as normal as possible — the principled upgrade when log isn't enough; being
+# fitted it belongs in `preprocess` (train-only). Compare the residual skew.
 log_revenue = np.log1p(compact["revenue"].to_numpy())
+power = preprocess.make_power_transformer(method="yeo-johnson")
+yj_revenue = power.fit_transform(compact["revenue"].to_numpy().reshape(-1, 1)).ravel()
+for label, series in [
+    ("raw", compact["revenue"].to_numpy()),
+    ("log1p", log_revenue),
+    ("yeo-johnson", yj_revenue),
+]:
+    print(f"{label:12s} skew {stats.describe_distribution(series)['skew']:+.2f}")
+
 fig, axes = base.grid(2)
-eda.qq(log_revenue, ax=axes[0], title="QQ — log(1+revenue)")
-eda.histogram(log_revenue, ax=axes[1], title="log(1+revenue)")
-print("normality (D'Agostino):", stats.normality_test(log_revenue, method="dagostino"))
+eda.qq(yj_revenue, ax=axes[0], title="QQ — Yeo-Johnson(revenue)")
+eda.histogram(yj_revenue, ax=axes[1], title="Yeo-Johnson(revenue)")
+print("normality (D'Agostino):", stats.normality_test(yj_revenue, method="dagostino"))
+
+# %%
+# Univariate fences (§3) miss *multivariate* outliers — a point normal on each axis but odd in the
+# joint shape (cheap unit price AND high units AND deep discount together). Mahalanobis distance
+# accounts for the correlation between columns; the largest distances are the joint anomalies to
+# eyeball before modelling.
+numeric_cols = ["revenue", "units", "unit_price", "discount"]
+matrix = compact.select(numeric_cols).to_numpy().astype(float)
+maha = np.array([distance.mahalanobis(row, matrix) for row in matrix])
+flagged = compact.select(numeric_cols).with_columns(pl.Series("mahalanobis", maha))
+print(flagged.sort("mahalanobis", descending=True).head(5))
 
 # %% [markdown]
 # ## 6. Explore — relationships across categories

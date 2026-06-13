@@ -120,14 +120,14 @@ narrative that delegates every non-trivial step to a tested `core` function:
 
 | Notebook | Demonstrates |
 |---|---|
-| `01_cleaning_and_eda` | Profiling a messy export → fixing dtypes, filling gaps, de-duping, winsorizing, downcasting, validating → distribution & relationship EDA |
+| `01_cleaning_and_eda` | Profiling a messy export → fixing dtypes, filling gaps, de-duping, winsorizing, downcasting, validating → distribution EDA (log vs fitted power transform, Mahalanobis multivariate outliers) & relationships |
 | `02_features_kpis_periods` | Feature engineering + a customer join → financial & behaviour KPIs → MoM/QoQ/YoY and per-segment group analysis |
 | `03_churn_modeling` | Stratified split → leakage-free pipelines → multi-model leaderboard + paired test → held-out evaluation → **profit-based threshold** → explainability → versioned save |
 | `04_segmentation_and_experiments` | k-means (elbow/silhouette) + PCA, anomaly detection, an A/B test with power analysis, and a causal cross-check |
 | `05_forecasting` | Decomposition/ACF/PACF → time features → forecaster bake-off on a holdout → rolling-origin backtest |
 | `06_scale_lazy_duckdb` | The headline GB-scale path: lazy Polars scan-with-pushdown + DuckDB SQL straight over Parquet/CSV (out-of-core) |
-| `07_statistical_inference` | Distributions & MLE fits, hypothesis tests, effect sizes, CIs & bootstrap, power and sample-size design |
-| `08_regression_inference` | OLS/GLM for *inference*, fixed vs mixed effects, and the assumption checks (VIF, Breusch-Pagan, Durbin-Watson) |
+| `07_statistical_inference` | Distributions & MLE fits (AIC/BIC), the full test battery (t/z/ANOVA/chi-square + GOF/Fisher/Friedman/Wilcoxon), the correlation suite by variable type (point-biserial/Cramér's V/phi/partial/kendall), effect sizes, CIs & bootstrap, power |
+| `08_regression_inference` | OLS/GLM for *inference*, fixed vs mixed effects, assumption checks (VIF, Breusch-Pagan, Durbin-Watson), endogeneity (Durbin-Wu-Hausman → IV) |
 | `09_causal_inference` | DiD, propensity matching/IPW, IV, RDD, synthetic control, uplift models + Qini |
 | `10_bayesian_methods` | Conjugate posteriors, hierarchical shrinkage, MCMC, Bayesian A/B decisions |
 | `11_timeseries_diagnostics` | Stationarity (ADF/KPSS), ACF/PACF, seasonal decomposition, trend tests, change points |

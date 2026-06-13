@@ -128,9 +128,11 @@ models = {
 list(models)
 
 # %%
+# `n_jobs=-1` fits the folds across all cores — the cheap speed-up once models or folds are slow;
+# leave it at 1 for fast models or fully reproducible serial runs.
 cv = split.make_cv("stratified", n_splits=5)
 board = compare.leaderboard(
-    models, x_train, y_train, cv=cv, scoring=["roc_auc", "average_precision", "f1"]
+    models, x_train, y_train, cv=cv, scoring=["roc_auc", "average_precision", "f1"], n_jobs=-1
 )
 board
 
@@ -251,7 +253,17 @@ y_pred = train.predict(fitted, x_test)
 print("winner:", best_name)
 
 # %%
-evaluate.classification_metrics(y_test, y_pred, y_score=y_score)
+# Binary problems get the confusion-derived rates by name: sensitivity (= recall, catching real
+# churners), specificity (correctly clearing the stayers), and NPV (trust in a "won't churn"
+# call) sit beside precision/F1/MCC. Which one you optimize is the business question — a retention
+# team that hates false alarms watches specificity; one that can't afford to miss churners watches
+# sensitivity.
+report = evaluate.classification_metrics(y_test, y_pred, y_score=y_score)
+print({k: round(v, 3) for k, v in report.items()})
+print(
+    f"sensitivity {report['sensitivity']:.0%} (churners caught) · "
+    f"specificity {report['specificity']:.0%} (stayers cleared) · NPV {report['npv']:.0%}"
+)
 
 # %%
 evaluate.report(y_test, y_pred)

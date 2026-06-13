@@ -182,6 +182,16 @@ interactive.line(
     title="Purchase-probability demand: expected buyers and revenue by price",
 )
 
+# %%
+# Consumer surplus = the value buyers capture above what they pay = the area under the demand
+# curve above the chosen price (∫ quantity d(price) from p upward). `curves.integrate` turns the
+# demand schedule into that money figure — the welfare number behind a "leave money on the table"
+# argument for raising price, or a customer-value argument against it.
+chosen_price = 100.0
+above = schedule.filter(pl.col("price") >= chosen_price)
+surplus = curves.integrate(above["price"].to_numpy(), above["quantity"].to_numpy())
+print(f"at €{chosen_price:.0f}: consumer surplus ≈ €{surplus:,.0f} sits above the price line")
+
 # %% [markdown]
 # ## 8. Van Westendorp — pricing *before* transaction data exists
 # For a new product there are no purchase logs; the price sensitivity meter asks each respondent

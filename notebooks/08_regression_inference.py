@@ -149,6 +149,34 @@ print(f"fixed effects    {within_coef:+.2f}   (within-store, confounder absorbed
 print(f"mixed effects    {mixed_coef:+.2f}   (group variance {mixed.group_variance:.1f})")
 
 # %% [markdown]
+# ## 5b. Endogeneity — is OLS even allowed here? (Durbin-Wu-Hausman → IV)
+# Fixed effects fix confounding you can demean away; but when a regressor correlates with the
+# *error* — price set in response to unobserved demand, a self-selected treatment — and you can't
+# demean it, OLS is biased and you don't always know it. The Durbin-Wu-Hausman test settles it:
+# regress the suspect on an instrument, add the residual back, and if that residual term is
+# significant the regressor is endogenous → switch to IV. IV is noisier, so you only pay that cost
+# when the test says you must. Synthetic: true price effect on demand is **-1.5**, but an
+# unobserved quality shock lifts both price and demand, so OLS reads it far too high.
+
+# %%
+n_obs = 3000
+cost_shifter = rng.normal(0.0, 1.0, n_obs)  # instrument: moves price, not demand directly
+quality = rng.normal(0.0, 1.0, n_obs)  # unobserved — the endogeneity
+price = 5.0 + 0.8 * cost_shifter + 1.2 * quality + rng.normal(0.0, 0.3, n_obs)
+demand = 50.0 - 1.5 * price + 3.0 * quality + rng.normal(0.0, 0.3, n_obs)  # quality is in the error
+market = pl.DataFrame({"demand": demand, "price": price, "cost_shifter": cost_shifter})
+
+naive = regression.ols_fit(market, y="demand", x=["price"]).coefficients
+naive_price = naive.filter(pl.col("term") == "price")["coef"][0]
+hausman = regression.durbin_wu_hausman(
+    market, y="demand", endogenous="price", exogenous=[], instruments=["cost_shifter"]
+)
+iv = causal.iv_effect(market["demand"], market["price"], market["cost_shifter"])
+print(f"naive OLS price effect   {naive_price:+.2f}   (biased — true is -1.5)")
+print(f"Durbin-Wu-Hausman        p={hausman.p_value:.2e} -> endogenous, OLS not allowed")
+print(f"IV (cost shifter)        {iv:+.2f}   (recovers the true price effect)")
+
+# %% [markdown]
 # ## 6. Cross-check with a black box — do the stories agree?
 # The bias-variance sketch frames what the diagnostics measure; then a gradient-boosted model +
 # permutation importance (held-out data) should rank the same churn drivers the GLM found, the
