@@ -45,7 +45,10 @@ def alert_metrics(
     detection_rate = float(detected.sum() / n_events) if n_events else float("nan")
     precision = float(detected.sum() / n_alerts) if n_alerts else float("nan")
     if lead_time is not None and detected.any():
-        mean_lead = float(np.asarray(lead_time, dtype=float)[detected].mean())
+        leads = np.asarray(lead_time, dtype=float)
+        if leads.shape != a.shape:
+            raise ValueError("lead_time must align with alerted/event (same length)")
+        mean_lead = float(leads[detected].mean())
     else:
         mean_lead = float("nan")
     return AlertMetrics(detection_rate, precision, n_events, n_alerts, mean_lead)

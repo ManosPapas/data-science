@@ -35,6 +35,11 @@ def generate_alerts(
     """
     if not bands:
         raise ValueError("need at least one (threshold, action) band")
+    if any(label == none_action for _, label in bands):
+        raise ValueError(
+            f"a band label collides with none_action={none_action!r} — it would be exempt from the "
+            "lead-time expiry gate; rename one of them"
+        )
     ordered = sorted(bands, key=lambda b: b[0])  # ascending; later overrides assign the top band
     action = pl.lit(none_action)
     for threshold, label in ordered:

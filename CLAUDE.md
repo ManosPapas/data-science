@@ -57,8 +57,19 @@ cross-cutting boilerplate is owned by a decorator or shared base, not repeated.
 - **Compute ≠ present.** Heavy computation (fitting for elbow/silhouette, SHAP, PDP) lives in
   `analytics`/`modeling`; the chart receives the result. Cheap, plot-specific math may stay in the chart.
 - **Imports.** Notebooks import the toolkit in one line — `from core.prelude import *`. Library modules
-  keep explicit per-module imports; Python caches modules in `sys.modules`, so that costs nothing at
-  runtime and keeps each module independent and type-checkable.
+  keep explicit per-module imports — **this is correct and required, not duplication**: Python imports
+  each module once and caches it in `sys.modules`, so repeating `import polars as pl` across 50 files
+  costs nothing at runtime (every import after the first is a dict lookup) and is what keeps each module
+  independently readable, testable, movable, and type-checkable by mypy. Do **not** try to "dedupe"
+  these into a shared star-import or a re-export hub — that breaks mypy/ruff and invites circular
+  imports; the prelude star-import is the *one* sanctioned exception and it is notebook-only. The rule
+  by weight:
+    - **Light, always-needed deps** (`numpy`, `polars`, `polars.selectors`, `seaborn`/`matplotlib.axes`
+      in viz) → import at **module top**.
+    - **Heavy or optional deps** (`scipy`, `statsmodels`, `sklearn`, `matplotlib.pyplot`, `shap`,
+      `imblearn`) → import **lazily inside the function** that uses them, so `from core.prelude import *`
+      stays fast for a notebook that only needs to clean a CSV. A module whose whole purpose is one of
+      these (e.g. `analytics.regression` ↔ statsmodels) may import it at top.
 
 ## Do
 

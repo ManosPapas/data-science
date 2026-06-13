@@ -63,7 +63,9 @@ def classification_metrics(
         out["sensitivity"] = float(tp / (tp + fn)) if (tp + fn) else 0.0
         out["specificity"] = float(tn / (tn + fp)) if (tn + fp) else 0.0
         out["npv"] = float(tn / (tn + fn)) if (tn + fn) else 0.0
-    if y_score is not None:
+    # Score-based metrics are undefined when the slice has only one class (a CV fold or segment
+    # that happens to be all-positive); skip them rather than let roc_auc_score crash the dict.
+    if y_score is not None and classes.size == 2:
         scores = np.asarray(y_score, dtype=float)
         out["roc_auc"] = float(metrics.roc_auc_score(yt, scores))
         out["average_precision"] = float(metrics.average_precision_score(yt, scores))

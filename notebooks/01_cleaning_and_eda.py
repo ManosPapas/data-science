@@ -173,8 +173,7 @@ print("normality (D'Agostino):", stats.normality_test(yj_revenue, method="dagost
 # accounts for the correlation between columns; the largest distances are the joint anomalies to
 # eyeball before modelling.
 numeric_cols = ["revenue", "units", "unit_price", "discount"]
-matrix = compact.select(numeric_cols).to_numpy().astype(float)
-maha = np.array([distance.mahalanobis(row, matrix) for row in matrix])
+maha = distance.mahalanobis_outliers(compact.select(numeric_cols).to_numpy())  # one cov inversion
 flagged = compact.select(numeric_cols).with_columns(pl.Series("mahalanobis", maha))
 print(flagged.sort("mahalanobis", descending=True).head(5))
 

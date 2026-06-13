@@ -261,6 +261,7 @@ Picking the metric is a modelling decision, not a detail.
 | `vector_distance(a, b, metric=, p=)` | Two vectors | euclidean (scale-sensitive — standardize first), manhattan/L1 (robust per-dimension), cosine (angle only, ignores magnitude — text/behaviour), minkowski (`p` interpolates), jaccard/hamming (sets/binary codes) |
 | `pairwise(x, metric=)` | All-pairs matrix | The input to clustering / kNN / MDS; standardize first for euclidean/minkowski |
 | `mahalanobis(point, data)` | Scale- *and* correlation-aware distance | Whitens by the inverse covariance — the statistically honest multivariate distance and the natural multivariate-outlier score (square it ≈ χ² under normality) |
+| `mahalanobis_outliers(data)` | Multivariate-outlier score for *every* row | Vectorized Mahalanobis to the centre (one covariance inversion for all rows, not per-row) — rank the largest to find joint anomalies; square ≈ χ²(k) for a threshold |
 | `cosine_similarity(a, b)` | Direction agreement in [-1, 1] | Magnitude-blind similarity for text/behaviour vectors (1 = same mix, 0 = orthogonal) |
 
 ---

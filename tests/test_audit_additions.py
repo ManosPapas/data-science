@@ -182,3 +182,30 @@ def test_durbin_wu_hausman_detects_endogeneity(rng: np.random.Generator) -> None
         df, y="y", endogenous="endog", exogenous=[], instruments=["z"]
     )
     assert result.p_value < 0.01  # endogeneity detected → OLS biased, use IV
+
+
+# --- Code-review fix regressions ----------------------------------------------------------------
+
+
+def test_tetrachoric_handles_degenerate_table() -> None:
+    # an almost-empty off-diagonal cell implies a near-±1 latent correlation: must clamp, not crash
+    rho = stats.tetrachoric([[50, 0], [1, 49]])
+    assert 0.9 < rho <= 1.0
+    rho_neg = stats.tetrachoric([[0, 50], [49, 1]])
+    assert -1.0 <= rho_neg < -0.9
+
+
+def test_classification_metrics_single_class_slice() -> None:
+    # an all-positive slice must not crash the score block (roc_auc is undefined there)
+    metrics = evaluate.classification_metrics([1, 1, 1], [1, 1, 1], y_score=[0.6, 0.7, 0.8])
+    assert "roc_auc" not in metrics  # skipped, not crashed
+    assert metrics["accuracy"] == 1.0
+
+
+def test_mahalanobis_outliers_matches_per_row(rng: np.random.Generator) -> None:
+    from core.analytics import distance
+
+    data = rng.multivariate_normal([0, 0], [[4.0, 1.0], [1.0, 1.0]], 300)
+    batched = distance.mahalanobis_outliers(data)
+    per_row = np.array([distance.mahalanobis(row, data) for row in data[:20]])
+    np.testing.assert_allclose(batched[:20], per_row, rtol=1e-6)

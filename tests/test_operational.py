@@ -126,3 +126,28 @@ def test_cross_environment_matrix(rng: np.random.Generator) -> None:
     cells = {(r["train"], r["test"]): r["score"] for r in matrix.iter_rows(named=True)}
     assert cells[("a", "a")] > 0.9 and cells[("b", "b")] > 0.9  # in-domain strong
     assert cells[("a", "b")] < 0.3  # opposite rule → transfer fails, as it should
+
+
+def test_generate_alerts_rejects_none_action_collision() -> None:
+    df = pl.DataFrame({"risk": [0.9, 0.2]})
+    with pytest.raises(ValueError, match="collides with none_action"):
+        operational.generate_alerts(df, score="risk", bands=[(0.5, "none")])
+
+
+def test_alert_metrics_rejects_misaligned_lead_time() -> None:
+    with pytest.raises(ValueError, match="align"):
+        operational.alert_metrics([1, 1, 0], [1, 0, 1], lead_time=[5.0, 3.0])
+
+
+def test_rescore_sequence_tolerates_id_dtype_drift(rng: np.random.Generator) -> None:
+    from sklearn.linear_model import LogisticRegression
+
+    x = pl.DataFrame({"f": rng.normal(size=40)})
+    y = (x["f"].to_numpy() > 0).astype(int)
+    model = train.fit(LogisticRegression(), x, y)
+    early = pl.DataFrame({"f": [0.1, -0.2], "id": pl.Series([1, 2], dtype=pl.Int32)})
+    late = pl.DataFrame({"f": [0.3, -0.1], "id": pl.Series([1, 2], dtype=pl.Int64)})
+    traj = operational.rescore_sequence(
+        model, {"early": early, "late": late}, feature_columns=["f"], id_column="id"
+    )
+    assert traj.height == 4  # vertical_relaxed supertypes the id column instead of raising

@@ -150,3 +150,12 @@ def test_undirected_weight_not_doubled_on_both_orientations() -> None:
     deg = graph.degree_centrality(edges, weight="w")
     a_weight = deg.filter(pl.col("node") == "a")["weighted_degree"][0]
     assert a_weight == pytest.approx(7.0)  # 3 (a-b, once) + 4 (a-c), not 10
+
+
+def test_frequent_itemsets_keeps_boundary_exact_support() -> None:
+    # an item with support EXACTLY min_support must survive (float round-up must not drop it)
+    rows = [{"order": t, "item": "x"} for t in range(7)]  # 7 of 100 transactions
+    rows += [{"order": t, "item": "filler"} for t in range(7, 100)]
+    df = pl.DataFrame(rows)
+    sets = basket.frequent_itemsets(df, transaction="order", item="item", min_support=0.07)
+    assert "x" in [items[0] for items in sets["items"].to_list()]

@@ -69,6 +69,26 @@ def mahalanobis(point: ArrayLike, data: ArrayLike, *, ridge: float = 1e-6) -> fl
     return float(_maha(np.asarray(point, dtype=float), mean, np.linalg.inv(cov)))
 
 
+def mahalanobis_outliers(data: ArrayLike, *, ridge: float = 1e-6) -> NDArray[np.float64]:
+    """Mahalanobis distance of *every* row to the centre — the multivariate outlier score.
+
+    Vectorized: inverts the covariance once and applies it to all rows (unlike calling
+    :func:`mahalanobis` per row, which re-inverts each time — O(n) inversions). The largest
+    distances are the joint anomalies (odd in the correlation structure, not just on one axis).
+    Square ≈ chi-square(n_features) under normality, so a threshold like ``chi2.ppf(0.99, k)``
+    flags the tail. Standardizing isn't needed — Mahalanobis already accounts for scale and
+    correlation.
+    """
+    matrix = np.asarray(data, dtype=float)
+    mean = matrix.mean(axis=0)
+    cov = np.atleast_2d(np.cov(matrix, rowvar=False)) + ridge * np.eye(matrix.shape[1])
+    inv_cov = np.linalg.inv(cov)
+    centered = matrix - mean
+    # row-wise sqrt((x-mean)' inv_cov (x-mean)) without a Python loop
+    distances = np.sqrt(np.einsum("ij,jk,ik->i", centered, inv_cov, centered))
+    return np.asarray(distances, dtype=float)
+
+
 def cosine_similarity(a: ArrayLike, b: ArrayLike) -> float:
     """Cosine similarity in [-1, 1] (1 - cosine distance) — direction agreement, magnitude-blind.
 
