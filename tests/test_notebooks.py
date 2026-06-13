@@ -30,10 +30,16 @@ def test_notebook_runs(notebook: Path) -> None:
     if prereq is not None and not prereq.exists():
         pytest.skip(f"prerequisite {prereq.name} missing — run notebook 01 first")
     env = {**os.environ, "MPLBACKEND": "Agg", "PYTHONIOENCODING": "utf-8"}
+    # The notebooks print non-ASCII UTF-8 (currency/maths symbols); decode their output as UTF-8
+    # explicitly so the parent
+    # doesn't fall back to the platform codec (cp1252 on Windows) and crash the reader thread on a
+    # non-cp1252 byte — which would also leave result.stderr as None and mask a real failure.
     result = subprocess.run(
         [sys.executable, str(notebook)],
         capture_output=True,
         text=True,
+        encoding="utf-8",
+        errors="replace",
         env=env,
         timeout=900,
         cwd=ROOT,
