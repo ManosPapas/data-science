@@ -18,6 +18,7 @@ from sklearn.preprocessing import (
     MinMaxScaler,
     OneHotEncoder,
     OrdinalEncoder,
+    PowerTransformer,
     RobustScaler,
     StandardScaler,
     TargetEncoder,
@@ -55,6 +56,23 @@ def make_scaler(strategy: str = "standard") -> Any:
     if strategy == "robust":
         return RobustScaler()
     raise ValueError(f"unknown scaler strategy: {strategy}")
+
+
+def make_power_transformer(method: str = "yeo-johnson", *, standardize: bool = True) -> Any:
+    """Variance-stabilizing power transform that *learns* its exponent on the training data.
+
+    For skewed positive amounts (revenue, durations, counts) where a fixed ``transform.log1p`` is
+    too blunt: Box-Cox / Yeo-Johnson fit the optimal power to make the column as normal as
+    possible, which steadies variance and straightens relationships for linear models, SVMs, and
+    distance methods. ``'yeo-johnson'`` handles zeros and negatives (the safe default);
+    ``'box-cox'`` needs strictly positive input but is the classic. Being fit, it belongs here
+    (train-only, applied to the rest) — unlike the stateless ``transform.log1p``. Trees don't need
+    it. Decreasing order of reach for skew: log1p (quick) → power transform (fitted) → model the
+    distribution directly (``stats.fit_distribution``).
+    """
+    if method not in {"yeo-johnson", "box-cox"}:
+        raise ValueError("method must be 'yeo-johnson' or 'box-cox'")
+    return PowerTransformer(method=method, standardize=standardize)
 
 
 def make_encoder(strategy: str = "onehot") -> Any:

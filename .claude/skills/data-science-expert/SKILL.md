@@ -71,14 +71,23 @@ already has; never answer from ad-hoc pandas when a tested core function exists.
 
 ## Module map (one line each — details in METHODS.md)
 
-- `analytics.stats` tests/CIs/power/distribution fits (+ discrete: poisson/nbinom/zip) ·
-  `regression` inference OLS/GLM/panel · `bayes` conjugates+MCMC · `experiment` A/B+SRM+CUPED+mSPRT ·
-  `causal` DiD/PSM/IV/RDD/synthetic control/uplift · `curves` derivatives/extrema/convexity ·
-  `drivers` change & price-volume-mix decomposition, revenue leakage · `risk` VaR/CVaR/drawdown ·
-  `graph` centrality/pagerank/flows · `basket` association rules
-- `modeling` registry/split/preprocess/train/tune/evaluate/compare/ensemble/imbalance/segment/
-  anomaly/monitor(+EWMA)/persist · `survival` KM/Cox/RMST · `recommend` item-item CF ·
-  `checks` monotonicity/robustness gates · `interpret` counterfactuals/conformal/confidence
+- `analytics.stats` tests (one/two-sample t, z, ANOVA, chi-square + GOF, Fisher, Friedman,
+  Kruskal, Wilcoxon, permutation) / CIs / power / distribution fits (continuous + discrete
+  poisson/nbinom/zip, AIC+BIC) / correlation suite (`correlation_kind` chooser → pearson/spearman/
+  kendall/point-biserial/Cramér's V/phi/tetrachoric/partial) · `regression` inference OLS/GLM/panel
+  + assumption checks (VIF, Breusch-Pagan, Durbin-Watson, `durbin_wu_hausman` endogeneity) ·
+  `bayes` conjugates+MCMC · `experiment` A/B+SRM+CUPED+mSPRT · `causal` DiD/PSM/IV/RDD/synthetic
+  control/uplift · `curves` derivatives/extrema/convexity/`integrate` · `drivers` change &
+  price-volume-mix decomposition, revenue leakage · `risk` VaR/CVaR/drawdown · `graph`
+  centrality/pagerank/flows · `basket` association rules · `distance` euclidean/manhattan/cosine/
+  mahalanobis/minkowski/jaccard/hamming
+- `modeling` registry (ridge/lasso/elasticnet/logistic/trees/boosting/svm/knn/...)/split/
+  preprocess (impute, scale, encode, `make_power_transformer` Box-Cox/Yeo-Johnson)/train (+`score`)/
+  tune/evaluate (+ specificity/sensitivity/NPV, ranking metrics)/compare (+`cross_environment`)/
+  ensemble/imbalance/segment (clustering/PCA/t-SNE)/anomaly/monitor(+EWMA)/persist · `survival`
+  KM/Cox/RMST · `recommend` item-item CF · `checks` monotonicity/robustness · `interpret`
+  counterfactuals/conformal/confidence. Parallelize folds with `n_jobs=-1` on cross_validate /
+  leaderboard / grid_search / random_search / permutation_importance
 - `forecasting` baselines/ARIMA/ETS/ML + `diagnostics` + `backtest` + `hierarchy` reconciliation
 - `pricing` elasticity(+CIs/cross/segments/drift) · `demand` WTP/logit/Van Westendorp ·
   `market` equilibrium/unconstraining/saturation/HHI · `optimize` optimal+dynamic prices

@@ -251,3 +251,36 @@ def linear_assumptions(features: pl.DataFrame, residuals: Floats) -> dict[str, f
         "max_vif": float(collinearity["vif"][0]),
         "max_vif_feature": str(collinearity["feature"][0]),
     }
+
+
+def durbin_wu_hausman(
+    df: pl.DataFrame,
+    *,
+    y: str,
+    endogenous: str,
+    exogenous: Sequence[str],
+    instruments: Sequence[str],
+) -> TestResult:
+    """Test a regressor for endogeneity (Durbin-Wu-Hausman) — is OLS biased here, do you need IV?
+
+    Endogeneity (the regressor correlates with the error — from omitted confounders, simultaneity,
+    or measurement error) silently biases OLS coefficients; IV (``causal.iv_effect``) fixes it but
+    is noisier, so you only pay that cost when you must. The augmented regression test: regress the
+    suspected ``endogenous`` variable on the ``exogenous`` controls + ``instruments``, take the
+    residuals, add them to the original OLS of ``y``; a significant residual coefficient means the
+    endogenous regressor *is* endogenous (small p → reject exogeneity → use IV). Instruments must
+    be relevant (move the endogenous var) and excludable (affect y only through it).
+    """
+    import statsmodels.api as sm
+
+    frame = df.select([y, endogenous, *exogenous, *instruments]).drop_nulls()
+    first_stage_x = sm.add_constant(frame.select([*exogenous, *instruments]).to_numpy())
+    residuals = frame[endogenous].to_numpy() - sm.OLS(
+        frame[endogenous].to_numpy(), first_stage_x
+    ).fit().predict(first_stage_x)
+    augmented = sm.add_constant(
+        np.column_stack([frame.select([endogenous, *exogenous]).to_numpy(), residuals])
+    )
+    fitted = sm.OLS(frame[y].to_numpy(), augmented).fit()
+    # the residual term is the last column; its t-test IS the Hausman endogeneity test
+    return TestResult(float(fitted.tvalues[-1]), float(fitted.pvalues[-1]))

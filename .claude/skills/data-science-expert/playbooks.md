@@ -3,6 +3,42 @@
 Each playbook: the business question → the core functions in order → the deliverable. Mirror the
 named notebook for narrative structure. All assume the two-line bootstrap and validated data.
 
+## Methodology rules — check assumptions *before* you reach for the function
+
+These are the order-of-operations every senior DS follows; the priority is **diagnose → choose →
+apply → verify**, never apply-blind.
+
+- **EDA first, in this order** (nb 01): shape (`stats.summary`/`cardinality`) → missingness
+  (`missingness` + `missingness_dependence`) → per-variable *distribution* and assumptions
+  (`describe_distribution`, `normality_test`, `best_distribution`/`fit_overlay`,
+  `dispersion_check` for counts) → *then* relationships (correlation by the right coefficient,
+  `mutual_information`, `simpsons_check`). You can't choose a test, an imputation, or a transform
+  until you know the distribution and the variable types.
+- **Imputation**: never default to the mean. Diagnose first — `missingness_dependence` (MCAR vs
+  MAR). Then choose by distribution: symmetric/normal (`normality_test` passes) → mean is fine;
+  skewed/outliers → **median** (`make_imputer("median")`); MAR (missingness depends on other
+  columns) → conditional (`make_imputer("knn"/"iterative")`); categorical → mode; missingness
+  itself informative (MNAR) → impute *and* keep a flag (`clean.add_missing_indicators`). Fit the
+  imputer on train only (it's in `preprocess`, so the CV pipeline enforces that).
+- **Correlation**: pick the coefficient by variable types — call `stats.correlation_kind(x_kind,
+  y_kind)` if unsure. Pearson only for continuous-continuous & linear; ordinal/non-linear →
+  spearman/kendall; binary↔continuous → point_biserial; categorical → cramers_v; suspected
+  confounder → partial_correlation. Pearson on a binary/nominal variable is the classic error.
+- **Transformation**: skewed positive amounts → `transform.log1p` (quick) → fitted power transform
+  (`preprocess.make_power_transformer`, Box-Cox/Yeo-Johnson) if log isn't enough → model the
+  distribution directly. Trees never need it; linear/SVM/distance methods do. Re-check
+  `normality_test`/skew after.
+- **Regression inference**: fit → **check assumptions before quoting p-values** —
+  `linear_assumptions` (normality, Breusch-Pagan heteroscedasticity, Durbin-Watson, VIF). High
+  VIF → drop/combine or Ridge; heteroscedastic → robust SEs or transform y; suspect a regressor is
+  endogenous → `durbin_wu_hausman` → if it fires, IV not OLS.
+- **Model comparison**: same CV folds for all (`split.make_cv`); compare by AIC/BIC for likelihood
+  models (BIC ≈ MDL, prefers simpler as n grows), by CV mean±std + `paired_test` for ML;
+  `cross_environment` before trusting transfer. Parallelize with `n_jobs=-1`.
+- **Distance-based methods** (KNN, clustering, anomaly): standardize first (euclidean is
+  scale-sensitive) or use `mahalanobis` (correlation-aware); cosine for text/behaviour vectors.
+- **Always state the identification caveat** (the §6 non-negotiable in SKILL.md).
+
 ## 1. Pricing / elasticity study (nb 13, 14)
 "What should we charge?" → `pricing.elasticity.fit_demand_ci` (CI must exclude -1 before any
 directional call) → `segment_elasticity` + `cross_price_elasticity` (substitutes move together) →

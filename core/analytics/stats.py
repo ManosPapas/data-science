@@ -288,6 +288,7 @@ def fit_distribution(data: Floats, dist: str = "norm") -> dict[str, Any]:
         "params": tuple(float(p) for p in params),
         "loglik": loglik,
         "aic": 2.0 * len(params) - 2.0 * loglik,
+        "bic": len(params) * float(np.log(arr.size)) - 2.0 * loglik,
         "ks_stat": float(ks_stat),
         "ks_p": float(ks_p),
     }
@@ -398,9 +399,20 @@ def proportions_test(successes: Sequence[int], totals: Sequence[int]) -> TestRes
 
 
 def correlation_test(a: Floats, b: Floats, *, method: str = "pearson") -> TestResult:
-    """Correlation with a p-value ('pearson' or 'spearman')."""
+    """Correlation with a p-value ('pearson', 'spearman', or 'kendall').
+
+    pearson = linear (interval data, outlier-sensitive); spearman = monotonic rank (ordinal /
+    non-linear / outlier-robust); kendall = rank concordance (small n, many ties — more robust
+    and interpretable than spearman there, but slower). Pick by the variable types and the
+    relationship shape, not by habit; see :func:`correlation_kind` for the categorical/mixed cases.
+    """
     x, y = np.asarray(a, dtype=float), np.asarray(b, dtype=float)
-    statistic, p_value = stats.spearmanr(x, y) if method == "spearman" else stats.pearsonr(x, y)
+    if method == "spearman":
+        statistic, p_value = stats.spearmanr(x, y)
+    elif method == "kendall":
+        statistic, p_value = stats.kendalltau(x, y)
+    else:
+        statistic, p_value = stats.pearsonr(x, y)
     return TestResult(float(statistic), float(p_value))
 
 
@@ -710,6 +722,7 @@ def fit_discrete(
         "params": {key: float(value) for key, value in params.items()},
         "loglik": loglik,
         "aic": 2.0 * estimated - 2.0 * loglik,
+        "bic": estimated * float(np.log(x.size)) - 2.0 * loglik,
     }
 
 
@@ -766,3 +779,197 @@ def dispersion_check(data: ArrayLike, *, alpha: float = 0.05) -> DispersionCheck
     p_value = float(stats.chi2.sf(statistic, x.size - 1))
     ratio = variance / mean
     return DispersionCheck(ratio, float(statistic), p_value, ratio > 1.0 and p_value < alpha)
+
+
+# --- Correlation suite (pick the coefficient by the variable types) -----------------------------
+
+
+def point_biserial(binary: ArrayLike, continuous: Floats) -> TestResult:
+    """Correlation between a binary variable and a continuous one (point-biserial r + p).
+
+    The right coefficient when one variable is a genuine 0/1 dichotomy (converted vs not) and the
+    other is interval (spend, age). Mathematically Pearson r with a 0/1 input, but named so the
+    call site documents the variable types.
+    """
+    b = np.asarray(binary, dtype=float)
+    if not np.isin(b, (0.0, 1.0)).all():
+        raise ValueError("binary must be coded 0/1")
+    statistic, p_value = stats.pointbiserialr(b, np.asarray(continuous, dtype=float))
+    return TestResult(float(statistic), float(p_value))
+
+
+def cramers_v(a: ArrayLike, b: ArrayLike, *, bias_correction: bool = True) -> float:
+    """Association between two categorical variables in [0, 1] (Cramér's V from chi-square).
+
+    The categorical analogue of a correlation magnitude: 0 = independent, 1 = perfectly
+    associated; works for any RxC table (use :func:`phi_coefficient` for the 2x2 case).
+    ``bias_correction`` applies the Bergsma correction, which matters at small n / large tables.
+    No direction (categories are unordered) — for the test + p-value use :func:`chi_square`.
+    """
+    table = (
+        pl.DataFrame({"a": np.asarray(a).astype(str), "b": np.asarray(b).astype(str)})
+        .pivot(on="b", index="a", values="a", aggregate_function="len")
+        .fill_null(0)
+        .drop("a")
+        .to_numpy()
+        .astype(float)
+    )
+    n = table.sum()
+    if n == 0:
+        raise ValueError("empty contingency table")
+    chi2 = float(stats.chi2_contingency(table, correction=False)[0])
+    phi2 = chi2 / n
+    rows, cols = table.shape
+    if bias_correction:
+        phi2 = max(0.0, phi2 - (cols - 1) * (rows - 1) / (n - 1))
+        rows = rows - (rows - 1) ** 2 / (n - 1)
+        cols = cols - (cols - 1) ** 2 / (n - 1)
+    denominator = min(cols - 1, rows - 1)
+    return float(np.sqrt(phi2 / denominator)) if denominator > 0 else float("nan")
+
+
+def phi_coefficient(a: ArrayLike, b: ArrayLike) -> float:
+    """Association between two binary variables (phi = Pearson r on 0/1), in [-1, 1].
+
+    The 2x2 case of :func:`cramers_v` but signed, so it carries direction. For two *dichotomized
+    continuous* variables whose latent correlation you want, :func:`tetrachoric` is the right
+    estimator instead.
+    """
+    x = np.asarray(a, dtype=float)
+    y = np.asarray(b, dtype=float)
+    if not (np.isin(x, (0.0, 1.0)).all() and np.isin(y, (0.0, 1.0)).all()):
+        raise ValueError("phi_coefficient needs two binary 0/1 variables")
+    return float(np.corrcoef(x, y)[0, 1])
+
+
+def tetrachoric(table: ArrayLike) -> float:
+    """Latent correlation between two *dichotomized continuous* variables from their 2x2 table.
+
+    When both 0/1 variables are really thresholded continuous traits (above/below median on two
+    underlying scores), phi understates their association; tetrachoric estimates the correlation
+    of the assumed bivariate-normal latents by matching the observed joint cell to the
+    bivariate-normal CDF. (Polychoric is the ordinal RxC generalization — a dedicated estimator;
+    for 2x2 this is the exact case.)
+    """
+    from scipy.optimize import brentq
+    from scipy.stats import multivariate_normal, norm
+
+    counts = np.asarray(table, dtype=float)
+    if counts.shape != (2, 2):
+        raise ValueError("tetrachoric needs a 2x2 contingency table")
+    n = counts.sum()
+    if n == 0 or np.any(counts.sum(axis=1) == 0) or np.any(counts.sum(axis=0) == 0):
+        raise ValueError("table has an empty row or column — correlation is undefined")
+    p = counts / n
+    h = float(norm.ppf(p[0, :].sum()))
+    k = float(norm.ppf(p[:, 0].sum()))
+    target = float(p[0, 0])
+
+    def gap(rho: float) -> float:
+        cdf = float(multivariate_normal([0.0, 0.0], [[1.0, rho], [rho, 1.0]]).cdf([h, k]))
+        return cdf - target
+
+    return float(brentq(gap, -0.999, 0.999))
+
+
+def partial_correlation(
+    df: pl.DataFrame, *, x: str, y: str, covariates: Sequence[str]
+) -> TestResult:
+    """Correlation between ``x`` and ``y`` with the linear effect of ``covariates`` removed.
+
+    The "controlling for" correlation: regress x and y each on the covariates, correlate the
+    residuals. Strips a confounder's contribution to an apparent association (ice-cream vs
+    drownings, controlling for temperature). Removes *linear* covariate effects only.
+    """
+    columns = [x, y, *covariates]
+    data = df.select(columns).drop_nulls().to_numpy().astype(float)
+    design = np.column_stack([np.ones(data.shape[0]), data[:, 2:]])
+
+    def residual(col: int) -> NDArray[np.float64]:
+        coef, _, _, _ = np.linalg.lstsq(design, data[:, col], rcond=None)
+        return np.asarray(data[:, col] - design @ coef, dtype=float)
+
+    statistic, p_value = stats.pearsonr(residual(0), residual(1))
+    return TestResult(float(statistic), float(p_value))
+
+
+def correlation_kind(x_kind: str, y_kind: str) -> str:
+    """Recommend a correlation coefficient from the two variables' types — the chooser.
+
+    ``x_kind``/``y_kind`` each one of 'continuous', 'ordinal', 'binary', 'nominal'. Returns the
+    function to reach for, so the call site picks the *right* coefficient instead of defaulting to
+    Pearson: continuous-continuous → pearson; any ordinal → spearman/kendall; binary-continuous →
+    point_biserial; binary-binary → phi_coefficient; anything nominal → cramers_v.
+    """
+    kinds = {x_kind, y_kind}
+    if "nominal" in kinds:
+        return "cramers_v"
+    if kinds == {"binary"}:
+        return "phi_coefficient"
+    if "binary" in kinds and "continuous" in kinds:
+        return "point_biserial"
+    if "ordinal" in kinds:
+        return "correlation_test(method='spearman'|'kendall')"
+    return "correlation_test(method='pearson')"
+
+
+# --- More hypothesis tests ----------------------------------------------------------------------
+
+
+def one_sample_t_test(x: Floats, popmean: float) -> TestResult:
+    """One-sample t-test: is the mean of ``x`` different from ``popmean``?
+
+    Compare a sample mean to a known target/benchmark (is average handle time above the 150s
+    SLA?). Assumes approximate normality of the mean (CLT covers it at n ≳ 30).
+    """
+    statistic, p_value = stats.ttest_1samp(np.asarray(x, dtype=float), popmean)
+    return TestResult(float(statistic), float(p_value))
+
+
+def chi_square_gof(observed: ArrayLike, expected: ArrayLike | None = None) -> TestResult:
+    """Chi-square goodness-of-fit: do observed category counts match an expected distribution?
+
+    ``expected`` defaults to uniform and is scaled to the observed total. Test whether a
+    categorical split matches a reference mix (this quarter's channel mix vs last year's). Wants
+    expected counts ≥ 5 per cell.
+    """
+    obs = np.asarray(observed, dtype=float)
+    exp = np.asarray(expected, dtype=float) if expected is not None else None
+    if exp is not None:
+        exp = exp * obs.sum() / exp.sum()
+    statistic, p_value = stats.chisquare(obs, f_exp=exp)
+    return TestResult(float(statistic), float(p_value))
+
+
+def fishers_exact(table: ArrayLike) -> TestResult:
+    """Fisher's exact test of independence on a 2x2 table — exact, for small samples.
+
+    The right test when chi-square's expected-count ≥ 5 assumption fails (rare events, small
+    cohorts). ``statistic`` is the odds ratio. Use :func:`chi_square` at larger n.
+    """
+    odds_ratio, p_value = stats.fisher_exact(np.asarray(table, dtype=float))
+    return TestResult(float(odds_ratio), float(p_value))
+
+
+def friedman_test(*measurements: Floats) -> TestResult:
+    """Friedman test: do 3+ *repeated* measurements on the same subjects differ?
+
+    The non-parametric repeated-measures ANOVA — same units under each condition (a panel scoring
+    three models, one cohort across three periods). Pass one array per condition, aligned by
+    subject. Significant → at least one condition differs; follow with pairwise Wilcoxon.
+    """
+    arrays = [np.asarray(m, dtype=float) for m in measurements]
+    if len(arrays) < 3:
+        raise ValueError("friedman_test needs at least 3 repeated conditions")
+    statistic, p_value = stats.friedmanchisquare(*arrays)
+    return TestResult(float(statistic), float(p_value))
+
+
+def wilcoxon_signed_rank(a: Floats, b: Floats) -> TestResult:
+    """Wilcoxon signed-rank test: paired non-parametric comparison of two related samples.
+
+    The robust paired alternative to a paired t-test (before/after on the same units, matched
+    pairs) when differences are skewed or ordinal. Tests whether the median paired difference is 0.
+    """
+    statistic, p_value = stats.wilcoxon(np.asarray(a, dtype=float), np.asarray(b, dtype=float))
+    return TestResult(float(statistic), float(p_value))

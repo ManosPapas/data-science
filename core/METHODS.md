@@ -37,7 +37,12 @@ House conventions:
 | `missingness_dependence(df, col)` | Deciding *how* to handle missing values | MCAR-vs-MAR triage: tests every other column between rows where `col` is null vs not (Welch t / chi-square). Small p = missingness depends on that column (MAR) → dropping rows or mean-imputing biases; impute conditionally (`preprocess.make_imputer("knn"/"iterative")`) and/or flag (`clean.add_missing_indicators`) |
 | `describe_distribution(x)` | Shape check on one sample | Mean, std, skew (asymmetry), kurtosis (tail weight), p05–p95 — skew/kurtosis ≫ 0 argue for transforms or non-parametric tests |
 | `correlation(df)` / `spearman(df)` | Linear vs monotonic association scan | Pearson r (linear, outlier-sensitive) vs Spearman rank ρ (monotonic, robust); both in [-1, 1], neither implies causation |
-| `correlation_test(a, b, method=)` | One pair, with evidence | r (or ρ) plus a p-value for H0: no association |
+| `correlation_test(a, b, method=)` | One pair, with evidence | r/ρ/τ plus a p-value for H0: no association. `method` = `pearson` (linear), `spearman` (monotonic rank), `kendall` (rank concordance, robust at small n / many ties) |
+| `correlation_kind(x_kind, y_kind)` | **First — which coefficient?** | The chooser: returns the right function for the variable-type pair (continuous/ordinal/binary/nominal). Don't default to Pearson — Pearson on a binary or nominal variable is the classic mistake |
+| `point_biserial(binary, continuous)` | Binary ↔ continuous | Correlation of a genuine 0/1 dichotomy with an interval variable (+ p) |
+| `cramers_v(a, b)` / `phi_coefficient(a, b)` | Categorical ↔ categorical | Cramér's V ∈ [0,1] for any RxC table (Bergsma-corrected); phi is the signed 2×2 case. Magnitude only — test + p via `chi_square` |
+| `tetrachoric(table)` | Two *dichotomized continuous* (2×2) | Latent bivariate-normal correlation when both 0/1s are thresholded scores — phi understates it. (Polychoric = ordinal RxC generalization, needs a dedicated estimator) |
+| `partial_correlation(df, x=, y=, covariates=)` | Correlation "controlling for" Z | Correlates the residuals after linearly removing the covariates — strips a confounder from an apparent association |
 | `mutual_information(df, target, task=)` | Non-linear feature relevance | MI ≥ 0 in nats between each numeric feature and the target; catches dependence correlation misses (task = `regression`/`classification`) |
 | `simpsons_check(df, x=, y=, group=)` | A headline trend smells like composition | Simpson's-paradox detector: pooled slope vs per-group slopes; `reversal=True` = the aggregate association flips within groups. Which margin to report is causal: condition on a confounder, not on a mediator |
 | `pct_change(current, previous)` | Quick relative change | (cur − prev)/prev, `None` on zero base |
@@ -47,7 +52,7 @@ House conventions:
 | Function | Use when | What it tells you |
 |---|---|---|
 | `normality_test(x, method=)` | Before t-tests/ANOVA, on residuals | H0: sample is normal. `shapiro` (best power < ~5k rows), `dagostino` (skew+kurtosis based, large n), `ks` (Lilliefors-corrected KS — plain KS would be anticonservative with estimated mean/std). Small p → go non-parametric or transform |
-| `fit_distribution(x, dist)` | You need a parametric model of a metric (revenue, delays, demand) | Maximum-likelihood fit of any scipy distribution; returns `params` (shape..., loc, scale), log-likelihood, AIC, and a KS goodness-of-fit p. MLE = the parameter values that make the observed data most probable |
+| `fit_distribution(x, dist)` | You need a parametric model of a metric (revenue, delays, demand) | Maximum-likelihood fit of any scipy distribution; returns `params` (shape..., loc, scale), log-likelihood, **AIC and BIC**, and a KS goodness-of-fit p. MLE = the parameter values that make the observed data most probable. AIC vs BIC: BIC's heavier n-scaled penalty (≈ minimum description length) prefers simpler models as data grows — agree → robust choice |
 | `best_distribution(x, candidates=)` | Which family fits best? | MLE-fits each candidate, ranked by AIC (lower = better fit after complexity penalty); incompatible candidates are skipped. Defaults span the commercial staples (norm, lognorm, expon, gamma, weibull_min, pareto, t) and *any* scipy continuous name can be added ('beta', 'genextreme', ...). Check the winner's `ks_p` too — best-of-bad is still bad |
 | `fit_discrete(x, dist, trials=)` | Count data (orders, claims, tickets) | MLE for the discrete families scipy can't `.fit`: `poisson` (variance = mean), `geometric` (trials until first success, support ≥ 1), `nbinom` (overdispersed counts — usually the right one), `binom` (successes out of known `trials`), `zip` (zero-inflated Poisson — never-buyers mixed with buyers; estimates the structural-zero share directly). Params plug into `scipy.stats.<dist>(**params)`; eyeball with `viz.eda.fit_overlay` |
 | `best_discrete(x, candidates=)` | Which count model? | Ranks the discrete fits by AIC; geometric drops out automatically when zeros are present. Poisson vs nbinom vs zip decides whether forecasts carry the real variance and the real zero mass |
@@ -64,6 +69,11 @@ House conventions:
 | `kruskal(*groups)` | 3+ groups, assumptions broken | Rank-based ANOVA analogue |
 | `chi_square(a, b)` | Two categorical variables | Test of independence on the contingency table; expected counts ≥ 5 per cell to be trustworthy |
 | `proportions_test(successes, totals)` | Two conversion rates | Two-proportion z-test (the classical A/B significance test) |
+| `one_sample_t_test(x, popmean)` | Mean vs a known target/benchmark | Is average handle time above the 150s SLA? Assumes approx-normal mean (CLT at n ≳ 30) |
+| `chi_square_gof(observed, expected=)` | Category counts vs an expected mix | Goodness-of-fit (expected defaults uniform, scaled to the total) — this quarter's channel mix vs last year's. Expected ≥ 5/cell |
+| `fishers_exact(table)` | 2×2 independence at small n | Exact test when chi-square's expected ≥ 5 fails (rare events); statistic = odds ratio |
+| `friedman_test(*conditions)` | 3+ *repeated* measures on the same units | Non-parametric repeated-measures ANOVA (a panel scoring three models); follow with pairwise Wilcoxon |
+| `wilcoxon_signed_rank(a, b)` | Paired, non-parametric | Robust paired alternative to the paired t-test (before/after, matched pairs) for skewed/ordinal differences |
 | `permutation_test(a, b)` | Small n / ugly distributions, but you want to compare *means* | Shuffles group labels to build the exact null of mean(a) − mean(b) — assumption-free significance (`mann_whitney` tests ranks, a different question) |
 | `compare_groups(df, value, group)` | One-call group comparison | Auto-picks the right test (checks normality; 2 levels → Welch/Mann-Whitney, 3+ → ANOVA/Kruskal) and reports effect size with the p-value |
 | `group_summary(df, value, group)` | Table for the deck | Per-group n, mean, std, and 95% CI half-width (±1.96·SE) |
@@ -128,6 +138,7 @@ Predictions survive mild violations; *inference* (coefficients, CIs, p-values) d
 | `breusch_pagan(residuals, features)` | Funnel-shaped residual plot | H0: constant error variance. Small p = heteroscedasticity → OLS standard errors are wrong; use robust (HC) errors or transform y |
 | `durbin_watson(residuals)` | Time-ordered data | First-order residual autocorrelation: ~2 none, < 1.5 positive, > 2.5 negative. Autocorrelated residuals make naive SEs overstate evidence — consider lags or time-series models |
 | `linear_assumptions(features, residuals)` | One-stop check after fitting | normality p, Breusch-Pagan p, Durbin-Watson, max VIF (+ which feature). Linearity itself is visual: `viz.model.residuals` should be a flat cloud |
+| `durbin_wu_hausman(df, y=, endogenous=, exogenous=, instruments=)` | Is a regressor endogenous? | Endogeneity (regressor correlated with the error — omitted confounder, simultaneity, measurement error) biases OLS. Augmented-regression Hausman test: small p → reject exogeneity → switch to IV (`causal.iv_effect`); large p → OLS is fine, keep the cheaper estimator. Needs relevant + excludable instruments |
 
 Residual normality: `stats.normality_test(y_true - y_pred)` + `viz.eda.qq`.
 
@@ -200,6 +211,7 @@ extrema found on raw noisy data.
 | Function | Use when | What it tells you |
 |---|---|---|
 | `slope(x, y)` / `curvature(x, y)` | Rate of change / acceleration along a curve | First/second derivative by central differences. Slope crossing 0 = a turning point; curvature < 0 = concave (diminishing returns) |
+| `integrate(x, y, method=)` | Area under a sampled curve (the integral) | The accumulation dual to `slope`: consumer surplus (area between WTP/demand and the price line), total response over a spend range, cumulative reach, area-under-survival. `trapezoid` (robust default) or `simpson` (smoother, many points) |
 | `point_elasticity(x, y)` | %-for-% sensitivity at each x | d ln(y)/d ln(x) along the curve — the local elasticity read for any response, not just demand |
 | `local_extrema(x, y)` | Find optima on a sampled curve | Interior maxima/minima, parabolic-refined. A "best" value at the grid edge means the real optimum may be outside the grid — widen it |
 | `inflection_points(x, y)` | Where acceleration flips | Sign changes of the second derivative: peak growth on an S-curve, onset of diminishing returns on a response curve |
@@ -236,6 +248,20 @@ P&L). Convention: outcomes are better-is-bigger, so risk lives in the low quanti
 | `probability_below/above(outcomes, threshold)` | Probability of failure / of hitting the target | Tail mass each side of the line — the number a commitment can be made on |
 | `sharpe_ratio` / `sortino_ratio(returns, ...)` | Risk-adjusted comparison | Mean excess return per unit of (downside) volatility; `periods_per_year` annualizes by √t |
 | `risk_summary(outcomes, targets=)` | The one-slide risk read | Mean/std, P5-P95, VaR/CVaR, P(≥ target) — P50 is the plan, P10 the funding case |
+
+---
+
+## analytics.distance — distance & similarity metrics
+
+The measure under every neighbourhood method (KNN, clustering, anomaly, matching, recommenders).
+Picking the metric is a modelling decision, not a detail.
+
+| Function | Use when | What it tells you |
+|---|---|---|
+| `vector_distance(a, b, metric=, p=)` | Two vectors | euclidean (scale-sensitive — standardize first), manhattan/L1 (robust per-dimension), cosine (angle only, ignores magnitude — text/behaviour), minkowski (`p` interpolates), jaccard/hamming (sets/binary codes) |
+| `pairwise(x, metric=)` | All-pairs matrix | The input to clustering / kNN / MDS; standardize first for euclidean/minkowski |
+| `mahalanobis(point, data)` | Scale- *and* correlation-aware distance | Whitens by the inverse covariance — the statistically honest multivariate distance and the natural multivariate-outlier score (square it ≈ χ² under normality) |
+| `cosine_similarity(a, b)` | Direction agreement in [-1, 1] | Magnitude-blind similarity for text/behaviour vectors (1 = same mix, 0 = orthogonal) |
 
 ---
 
@@ -285,6 +311,7 @@ inside the training side only.
 |---|---|---|
 | `make_imputer(strategy)` | Filling numeric gaps | `mean`/`median` for MCAR gaps (median is outlier-robust); `knn` (neighbour mean) and `iterative` (MICE-style — each column regressed on the rest, in rounds) impute *conditionally* for MAR. Diagnose first with `stats.missingness_dependence`; keep flags via `clean.add_missing_indicators` when missingness is informative (MNAR) |
 | `make_scaler(strategy)` | Features on different scales | `standard` z-scores (linear/SVM/PCA assume centred, comparable scales); `minmax` 0-1 normalization (distance-based models, NNs); `robust` median/IQR (outliers would otherwise set the scale). Trees don't care |
+| `make_power_transformer(method=)` | Skewed positive amounts, fitted | Box-Cox / Yeo-Johnson learn the optimal power to normalize a column (steadies variance, straightens relationships) — the fitted upgrade over the stateless `transform.log1p`. Yeo-Johnson handles zeros/negatives. Skew ladder: `log1p` (quick) → power transform (fitted) → model the distribution (`stats.fit_distribution`) |
 | `make_encoder(strategy)` | Categoricals → numbers | `onehot`: no fake order, column-per-level (explodes with cardinality); `ordinal`: compact integer codes but *imposes an order* — alphabetical by default, so supply real orderings yourself; `target`: mean-target per level in one column for high cardinality, cross-fitted internally to limit target leakage (needs `y` at fit) |
 | `make_preprocessor(numeric=, categorical=, ...)` | The standard pipeline | ColumnTransformer wiring the above; drop into `train.fit(model, x, y, preprocessor=...)` so CV refits it per fold (no leakage) |
 
@@ -328,7 +355,7 @@ Statistical map of the menu:
 | Function | Use when | What it offers statistically |
 |---|---|---|
 | `train.fit(model, x, y, preprocessor=)` | Plain fit | Wraps preprocessing + model into one Pipeline → CV revalidates the *whole* chain |
-| `train.cross_validate(model, x, y, cv=)` | Generalization estimate | k-fold scores: mean = expected out-of-sample performance, std = its stability. Use instead of one lucky split |
+| `train.cross_validate(model, x, y, cv=)` | Generalization estimate | k-fold scores: mean = expected out-of-sample performance, std = its stability. Use instead of one lucky split. `n_jobs=-1` runs folds in parallel (also on `compare.fold_scores`/`leaderboard`, `tune.grid_search`/`random_search`, `evaluate.permutation_importance`) — the cheap win on a slow model; leave it 1 for fast models or reproducible serial runs |
 | `train.cross_val_predict(model, x, y, method=)` | Honest predictions for curves/plots | Out-of-fold predictions — every row predicted by a model that never saw it; feed ROC/calibration/threshold tools |
 | `train.predict` / `predict_proba` / `score_frame` | Scoring | Probabilities feed ranking metrics (AUC), calibration, and threshold tuning |
 | `train.partial_fit(model, x, y, classes=)` | Streaming / out-of-core | Incremental learning for SGD/NB/MLP-style models |
@@ -344,7 +371,7 @@ Statistical map of the menu:
 | Function | Use when | Statistical reading |
 |---|---|---|
 | `regression_metrics(y_true, y_pred)` | Any regressor | RMSE (quadratic loss — punishes big misses; same units as y), MAE (linear loss, robust), median-AE (outlier-immune), MAPE (% terms; explodes near zero actuals), RMSLE (relative errors, log-scale), R²/explained variance (share of variance explained; R² can be negative out-of-sample = worse than predicting the mean) |
-| `classification_metrics(y_true, y_pred, y_score=)` | Any classifier | Accuracy (misleading under imbalance), balanced accuracy (mean per-class recall), precision (TP/(TP+FP) — cost of acting), recall (TP/(TP+FN) — cost of missing), F1 (harmonic mean), MCC & kappa (chance-corrected, imbalance-robust). With scores: ROC-AUC (P(random + ranked above random −); misleading under heavy imbalance), average precision (PR-AUC — prefer it there), log-loss & Brier (probability *quality*, not just ranking) |
+| `classification_metrics(y_true, y_pred, y_score=)` | Any classifier | Accuracy (misleading under imbalance), balanced accuracy (mean per-class recall), precision (TP/(TP+FP) — cost of acting), recall (TP/(TP+FN) — cost of missing), F1 (harmonic mean), MCC & kappa (chance-corrected, imbalance-robust). **Binary** also gets sensitivity (= recall/TPR), **specificity** (TNR), and NPV — the negative-class mirrors a medical/fraud reviewer asks for. With scores: ROC-AUC (P(random + ranked above random −); misleading under heavy imbalance), average precision (PR-AUC — prefer it there), log-loss & Brier (probability *quality*, not just ranking) |
 | `report(y_true, y_pred)` | Multi-class detail | Per-class precision/recall/F1/support — finds the class the headline number hides |
 | `pinball_loss(y_true, y_pred, alpha=)` | Quantile models / intervals | Proper loss for the α-quantile (asymmetric penalty) |
 
@@ -810,6 +837,16 @@ All `@chart` functions: pass prepared data, get an `Axes` (multi-panel ones retu
 | Bootstrapping | `stats.bootstrap_ci` (BCa resampling CI for any statistic) |
 | Permutation testing | `stats.permutation_test` (shuffle-based, assumption-free significance) |
 | Likelihood & MLE | `stats.fit_distribution` / `best_distribution` (continuous); `fit_discrete` / `best_discrete` (counts); visual check via `viz.eda.fit_overlay` |
+| AIC / BIC / minimum description length | AIC + BIC on every `fit_distribution`/`fit_discrete` + `regression.FitSummary`/forecasting; BIC ≈ MDL (heavier n-scaled penalty → simpler models as data grows); compare candidates, agreement = robust |
+| Correlation by variable type (pearson/spearman/kendall/point-biserial/phi/Cramér's V/tetrachoric/partial) | `stats.correlation_kind` (the chooser) → `correlation_test(method=)`, `point_biserial`, `cramers_v`, `phi_coefficient`, `tetrachoric`, `partial_correlation` |
+| Tests (one/two-sample, ANOVA, chi-square + GOF, Fisher, Friedman, Kruskal, Wilcoxon, z) | `stats.one_sample_t_test`/`welch_t_test`/`proportions_test`/`anova`/`chi_square`/`chi_square_gof`/`fishers_exact`/`friedman_test`/`kruskal`/`wilcoxon_signed_rank`/`mann_whitney`/`permutation_test` |
+| Specificity / sensitivity / NPV | `evaluate.classification_metrics` (binary adds these to precision/recall/F1/accuracy) |
+| Endogeneity / when to use IV | `regression.durbin_wu_hausman` (test) → `causal.iv_effect` (fix) |
+| Distances & similarity (euclidean/manhattan/cosine/mahalanobis/minkowski/jaccard/hamming) | `analytics.distance.vector_distance` / `pairwise` / `mahalanobis` / `cosine_similarity` |
+| Transformations (log / power / Box-Cox / Yeo-Johnson) | `transform.log1p` (stateless), `preprocess.make_power_transformer` (fitted Box-Cox/Yeo-Johnson), `transform.discretize`, `preprocess.make_scaler` |
+| Numerical integration / area under a curve | `analytics.curves.integrate` (consumer surplus, cumulative response, area-under-survival) |
+| Run models in parallel | `n_jobs=` on `train.cross_validate`, `compare.fold_scores`/`leaderboard`, `tune.grid_search`/`random_search`, `evaluate.permutation_importance` |
+| Moving average / exponential smoothing / Holt-Winters / Prophet | `temporal.add_rolling` (MA feature) + `forecaster("mean"/"seasonal_naive")` baselines; `forecaster("ets"/"holt_winters")` = exponential smoothing / Holt-Winters; Prophet → covered by `ets`/`sarimax` + `temporal.add_holiday_flags` (no extra dep) |
 | Count distributions & overdispersion (Poisson / geometric / negative binomial / binomial / zero-inflated) | `stats.fit_discrete` / `best_discrete` / `dispersion_check`; regression side via `glm_fit(family="poisson")` and registry `poisson`/`tweedie` |
 | Decision boundaries / class separation (KNN, trees, SVM, k-means) | `viz.model.decision_boundary` (hard regions or `soft=True` probability shading); the tree's rules via `viz.model.tree_diagram` |
 | Bayesian vs frequentist | `experiment.bayes_conversions` / `bayes_means` vs `analyze_*`; `analytics.bayes`; `ThompsonSampling` |

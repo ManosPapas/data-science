@@ -24,11 +24,17 @@ def fit(model: Any, x: Any, y: Any, *, preprocessor: Any | None = None) -> Any:
 
 
 def cross_validate(
-    model: Any, x: Any, y: Any, *, cv: Any = 5, scoring: Any = None
+    model: Any, x: Any, y: Any, *, cv: Any = 5, scoring: Any = None, n_jobs: int = 1
 ) -> dict[str, Any]:
-    """Cross-validation scores. Pass a splitter (see ``split.make_cv``) as ``cv``."""
+    """Cross-validation scores. Pass a splitter (see ``split.make_cv``) as ``cv``.
+
+    ``n_jobs`` fits the folds in parallel (``-1`` = all cores) — the cheap win on a slow model or
+    many folds; leave it 1 for fast models or fully reproducible serial runs.
+    """
     return dict(
-        model_selection.cross_validate(model, to_features(x), to_target(y), cv=cv, scoring=scoring)
+        model_selection.cross_validate(
+            model, to_features(x), to_target(y), cv=cv, scoring=scoring, n_jobs=n_jobs
+        )
     )
 
 

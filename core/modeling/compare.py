@@ -25,11 +25,14 @@ class PairedResult:
 
 
 def fold_scores(
-    model: Any, x: Any, y: Any, *, cv: Any = 5, scoring: str = "accuracy"
+    model: Any, x: Any, y: Any, *, cv: Any = 5, scoring: str = "accuracy", n_jobs: int = 1
 ) -> NDArray[np.float64]:
-    """Per-fold test scores for one model + metric (use the same ``cv`` across models)."""
+    """Per-fold test scores for one model + metric (use the same ``cv`` across models).
+
+    ``n_jobs`` fits the folds in parallel (``-1`` = all cores).
+    """
     scores = model_selection.cross_val_score(
-        model, to_features(x), to_target(y), cv=cv, scoring=scoring
+        model, to_features(x), to_target(y), cv=cv, scoring=scoring, n_jobs=n_jobs
     )
     return np.asarray(scores, dtype=float)
 
@@ -41,16 +44,20 @@ def leaderboard(
     *,
     cv: Any = 5,
     scoring: str | Sequence[str] = "accuracy",
+    n_jobs: int = 1,
 ) -> pl.DataFrame:
     """Rank models on identical CV folds; returns mean & std per metric (sorted by the first).
 
-    Pass a splitter from ``split.make_cv`` as ``cv`` so every model sees the same folds.
+    Pass a splitter from ``split.make_cv`` as ``cv`` so every model sees the same folds. ``n_jobs``
+    parallelizes the fold fits within each model (``-1`` = all cores).
     """
     metrics = [scoring] if isinstance(scoring, str) else list(scoring)
     features, target = to_features(x), to_target(y)
     rows: list[dict[str, Any]] = []
     for name, model in models.items():
-        result = model_selection.cross_validate(model, features, target, cv=cv, scoring=metrics)
+        result = model_selection.cross_validate(
+            model, features, target, cv=cv, scoring=metrics, n_jobs=n_jobs
+        )
         row: dict[str, Any] = {"model": name}
         for metric in metrics:
             scores = result[f"test_{metric}"]

@@ -56,6 +56,24 @@ def curvature(x: ArrayLike, y: ArrayLike) -> NDArray[np.float64]:
     return np.asarray(np.gradient(np.gradient(ys, xs), xs), dtype=float)
 
 
+def integrate(x: ArrayLike, y: ArrayLike, *, method: str = "trapezoid") -> float:
+    """Area under a sampled curve — the integral, by the trapezoid or Simpson rule.
+
+    The accumulation read, dual to :func:`slope`'s rate read. Commercial uses: consumer surplus
+    (area between willingness-to-pay/demand and the price line), total response over a spend
+    range, expected retained time (the area-under-survival that ``survival.restricted_mean`` is),
+    cumulative reach. ``method='simpson'`` is more accurate on smooth curves with many points;
+    'trapezoid' is the robust default for noisy or sparse samples. Pass an already-sliced curve to
+    integrate over a sub-range.
+    """
+    xs, ys = _as_curve(x, y)
+    if method == "simpson":
+        from scipy.integrate import simpson
+
+        return float(simpson(ys, x=xs))
+    return float(np.trapezoid(ys, xs))
+
+
 def point_elasticity(x: ArrayLike, y: ArrayLike) -> NDArray[np.float64]:
     """Local elasticity d ln(y) / d ln(x) along the curve — the %-for-% sensitivity at each x."""
     xs, ys = _as_curve(x, y)
