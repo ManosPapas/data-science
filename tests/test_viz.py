@@ -152,6 +152,24 @@ def test_business_charts_return_axes(rng: np.random.Generator) -> None:
     )
     assert isinstance(business.price_policy(policy), Axes)
 
+    part_worths = pl.DataFrame(
+        {
+            "attribute": ["brand", "brand", "size", "size"],
+            "level": ["A", "B", "S", "L"],
+            "utility": [0.0, 0.9, 0.0, 0.7],
+        }
+    )
+    assert isinstance(business.part_worth_utilities(part_worths), Axes)
+
+    importance = pl.DataFrame({"attribute": ["brand", "size"], "importance_pct": [60.0, 40.0]})
+    assert isinstance(business.attribute_importance(importance), Axes)
+
+    shares = pl.DataFrame({"product": ["premium", "value"], "share": [0.65, 0.35]})
+    assert isinstance(business.preference_share(shares, label="product"), Axes)
+
+    maxdiff = pl.DataFrame({"item": ["A", "B", "C"], "utility": [1.2, 0.0, -0.9]})
+    assert isinstance(business.maxdiff_scores(maxdiff), Axes)
+
 
 def test_network_chart(rng: np.random.Generator) -> None:
     from core.viz import network as network_viz

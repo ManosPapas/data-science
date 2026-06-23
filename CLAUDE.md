@@ -119,7 +119,9 @@ core/        the package (flat layout at the repo root — no src/ wrapper)
                 convexity/response curves), drivers (change & price-volume-mix decomposition,
                 revenue leakage), risk (VaR/CVaR/drawdown/Sharpe/Sortino/target probabilities),
                 graph (centrality/pagerank/components/paths/MST/max-flow), basket (frequent
-                itemsets + association rules)
+                itemsets + association rules), choice (conditional/multinomial logit, choice-based &
+                metric conjoint + part-worths/importance/share-of-preference/WTP, MaxDiff
+                best-worst, orthogonal/D-optimal experimental designs)
   modeling/     registry (make_model), train (fit/predict/cross-val/partial_fit/score), tune,
                 ensemble, imbalance, evaluate + compare (+ curves/permutation importance/RFECV/
                 ranking metrics/cross-environment transfer), persist, split, preprocess, segment

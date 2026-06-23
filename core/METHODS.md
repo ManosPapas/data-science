@@ -291,6 +291,36 @@ graphs: co-purchase (from `analytics.basket`), referrals, logistics, money movem
 
 ---
 
+## analytics.choice — conjoint, MaxDiff & discrete choice
+
+The *stated-preference* counterpart to `pricing.demand`: read what customers value from how they
+**choose** (or rate, or rank) hypothetical product profiles, not from transactions. Estimation is
+McFadden's conditional (multinomial) logit — fit by maximising the within-set choice likelihood;
+its globally-concave objective gives a clean fit and exact information-matrix standard errors.
+Utilities are identified only **up to scale**, so read differences and signs, not absolute levels.
+
+| Function | Use when | What it tells you |
+|---|---|---|
+| `fit_conditional_logit(df, choice=, choice_set=, features=)` | Choices over alternatives with alternative-specific attributes | McFadden conditional logit on a long table (one row per alternative-in-set, one chosen per set). Coefficients are utilities on the logit scale (a unit change multiplies the set's choice odds by exp(coef)); returns SEs/CIs, McFadden pseudo-R² (0.2-0.4 is a good logit fit), AIC. Assumes IIA — a near-duplicate alternative shouldn't steal share disproportionately (else nested/mixed logit) |
+| `choice_based_conjoint(df, choice=, choice_set=, attributes=, price=)` | The standard CBC study | Dummy-codes the attribute levels, fits the logit, and returns a `Conjoint`: part-worths (utility per level, reference pinned to 0), attribute importances, a share simulator, and WTP. Keep `price` continuous (don't dummy-code it) so willingness-to-pay works |
+| `metric_conjoint(df, rating=, attributes=, price=)` | Respondents *rated* profiles, not chose | OLS read: the level coefficients are the part-worths, the intercept is the reference profile's baseline rating. Lower-variance than CBC when ratings exist, but rating scales are noisier and less behaviourally grounded than real choices |
+| `Conjoint.simulate(profiles, label=, scale=)` | "What share would this line-up win?" | Share of preference via the logit rule (softmax of total utility); shares sum to 1 (first-choice, no outside option). `scale` > 1 sharpens toward the top product when tuning against a holdout |
+| `Conjoint.willingness_to_pay()` | Put part-worths in money | Each level's utility ÷ (−price coefficient) = the price a respondent would trade to get it. Needs a numeric `price` with a negative coefficient; a non-negative one means WTP is undefined (confounding) |
+| `attribute_importance(part_worths)` | Which attribute moves choice most | Each attribute's part-worth range as a share of the total. Depends on the level spans you tested — a wider price range mechanically inflates price's importance, so compare only across comparable studies |
+| `maxdiff_counts(df, item_col=, best_col=, worst_col=)` | Quick, assumption-free MaxDiff | Counting score (times best − times worst) / times shown ∈ [−1, 1], pooled across tasks. Transparent and fast; filter to one respondent first for individual-level scores |
+| `maxdiff_logit(df, set_col=, item_col=, best_col=, worst_col=)` | MaxDiff on an interval scale | The exploded best-worst logit (best = max-utility pick, worst = min-utility pick via negated features), fitted on the same engine. Returns item utilities (reference item 0) + SEs + a softmax `share` — supports ratio-style statements the counting score can't |
+| `full_factorial(levels)` | Enumerate the profile space | Every attribute-level combination; estimable but explodes combinatorially — feed it to `orthogonal_design` |
+| `orthogonal_design(levels, n_profiles=, seed=)` | The profiles to actually field | A compact D-efficient fractional design via Fedorov coordinate exchange; `n_profiles` defaults to the parameter count (the identifiability floor). Check the result with `d_efficiency` |
+| `d_efficiency(design, levels)` | Score a design | (det(XᵀX / n))^(1/p) on the dummy-coded matrix; higher = more orthogonal/balanced = tighter estimates, 0 = singular (a missing level can't be identified). Compare only designs for the same `levels` |
+| `choice_design(profiles, n_sets=, alternatives=, include_none=)` | Build CBC tasks | Assembles profiles into choice tasks (long `choice_set`/`alternative`/attributes); `include_none` adds an outside-option column so share simulation can include "buys nothing" |
+| `maxdiff_design(items, n_sets=, items_per_set=)` | Build MaxDiff tasks | Balanced randomized assignment of items to tasks (even exposure, distinct within a task) |
+
+Aggregate models estimate population-mean part-worths. For heterogeneity, segment respondents
+(`modeling.segment`), score per-respondent (`maxdiff_counts` grouped), or extend to hierarchical
+Bayes (`analytics.bayes`) for individual-level utilities.
+
+---
+
 ## modeling.split — honest train/test separation
 
 Leakage rule (PDF §5): split **first**, fit everything (scalers, imputers, encoders, resamplers)
@@ -815,6 +845,10 @@ All `@chart` functions: pass prepared data, get an `Axes` (multi-panel ones retu
 | `business.price_curves` | Revenue/profit (any response) vs price with the recommended optimum marked |
 | `business.van_westendorp` | The four survey curves with the crossing points (optimal / range bounds) marked |
 | `business.price_policy` | Dynamic-pricing policy heatmap (period × remaining stock → price): markdown toward the deadline, scarcity premium toward the stock-out corner |
+| `business.part_worth_utilities` | Part-worth utility per level from a fitted `analytics.choice` conjoint, coloured by attribute with reference levels at the 0 line |
+| `business.attribute_importance` | Relative attribute importances from `choice.attribute_importance` — biggest lever on top |
+| `business.preference_share` | Simulated choice shares from `Conjoint.simulate` — the line-up's predicted demand split |
+| `business.maxdiff_scores` | Best-worst item preferences from `choice.maxdiff_logit` / `maxdiff_counts` as a diverging bar around 0 (pass `value="score"` for the counting score) |
 | `network.network` | Edge list as a force-directed graph (no networkx): node size = degree, edge width = weight; hubs central, communities clustered. Qualitative — read exact structure off `analytics.graph` tables; filter big edge lists first |
 | `conceptual.dag(edges)` | Causal DAG from (cause, effect) pairs — pick the adjustment set: block backdoor paths (confounders), don't condition on colliders or mediators |
 | `conceptual.gini_vs_entropy` / `conceptual.bias_variance` | Teaching sketches (impurity criteria, error decomposition) — functions of a parameter, not data |
@@ -905,7 +939,11 @@ All `@chart` functions: pass prepared data, get an `Axes` (multi-panel ones retu
 | Price elasticity & revenue optimization | `pricing.elasticity.fit_demand` / `fit_demand_ci` + `pricing.optimize.optimal_price` / `markup_price` / `optimal_price_linear` |
 | Cross-price elasticity (substitutes/complements) | `pricing.elasticity.cross_price_elasticity` |
 | Segment-level / dynamic elasticity & drift | `pricing.elasticity.segment_elasticity` / `rolling_elasticity` / `elasticity_drift` / `nonlinear_elasticity_check` / `elasticity_decomposition` |
-| Willingness to pay / purchase probability | `pricing.demand.fit_logit_demand` / `willingness_to_pay` / `van_westendorp` |
+| Willingness to pay / purchase probability | `pricing.demand.fit_logit_demand` / `willingness_to_pay` / `van_westendorp`; from conjoint part-worths → `analytics.choice.Conjoint.willingness_to_pay` |
+| Conjoint analysis (choice-based / ratings) | `analytics.choice.choice_based_conjoint` (CBC) / `metric_conjoint` (rated profiles) → part-worths, `attribute_importance`, `Conjoint.simulate` share-of-preference |
+| MaxDiff / best-worst scaling | `analytics.choice.maxdiff_counts` (counting score) / `maxdiff_logit` (interval-scale exploded logit) |
+| Discrete choice / conditional (multinomial) logit | `analytics.choice.fit_conditional_logit` — utilities + McFadden pseudo-R²; assumes IIA |
+| Experimental design / DOE (orthogonal, D-optimal) | `analytics.choice.full_factorial` / `orthogonal_design` (Fedorov exchange) / `d_efficiency`; survey tasks → `choice_design` / `maxdiff_design` |
 | Demand curves & schedules | `pricing.demand.fit_linear_demand` / `demand_schedule`; constant-elasticity in `pricing.elasticity` |
 | Dynamic pricing / revenue management | `pricing.optimize.dynamic_prices` (finite-horizon DP); censored-demand unconstraining → `pricing.market.unconstrain_demand` |
 | Marginal revenue / marginal profit / marginal effects | `pricing.optimize.marginal_revenue` / `marginal_profit`; generic → `analytics.curves.marginal_effect` / `gradient` |

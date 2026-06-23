@@ -294,3 +294,80 @@ def price_policy(
     ax.set(xlabel=period, ylabel=remaining)
     step = max(1, levels.size // 8)
     ax.set_yticks(np.arange(0, levels.size, step), [f"{v:g}" for v in levels[::step]])
+
+
+@chart(title="Part-worth utilities")
+def part_worth_utilities(
+    ax: Axes,
+    part_worths: pl.DataFrame,
+    *,
+    attribute: str = "attribute",
+    level: str = "level",
+    value: str = "utility",
+) -> None:
+    """Part-worth utility of every level from a fitted ``analytics.choice`` conjoint.
+
+    Bars are coloured by attribute and reference levels sit at the 0 line; a wider span within an
+    attribute means it swings choice more — the picture behind ``choice.attribute_importance``.
+    """
+    palette = sns.color_palette()
+    attrs = part_worths[attribute].to_list()
+    order = list(dict.fromkeys(attrs))  # stable unique, in appearance order
+    color_for = {name: palette[index % len(palette)] for index, name in enumerate(order)}
+    labels = [f"{a}: {lvl}" for a, lvl in zip(attrs, part_worths[level].to_list(), strict=True)]
+    positions = np.arange(len(labels))
+    ax.barh(
+        positions, part_worths[value].to_numpy(), color=[color_for[a] for a in attrs], alpha=0.85
+    )
+    ax.axvline(0.0, color="#444444", linewidth=1.0)
+    ax.set_yticks(positions, labels)
+    ax.invert_yaxis()  # first attribute/level on top
+    ax.set(xlabel="part-worth utility", ylabel="")
+
+
+@chart(title="Attribute importance")
+def attribute_importance(
+    ax: Axes,
+    importance: pl.DataFrame,
+    *,
+    attribute: str = "attribute",
+    value: str = "importance_pct",
+) -> None:
+    """Relative attribute importances from ``choice.attribute_importance``; biggest lever on top."""
+    ordered = importance.sort(value)  # ascending so barh stacks the largest at the top
+    ax.barh(
+        ordered[attribute].to_list(),
+        ordered[value].to_numpy(),
+        color=sns.color_palette()[0],
+        alpha=0.85,
+    )
+    ax.set(xlabel="importance (%)", ylabel="")
+
+
+@chart(title="Share of preference")
+def preference_share(
+    ax: Axes, shares: pl.DataFrame, *, label: str = "product", share: str = "share"
+) -> None:
+    """Simulated choice shares from ``Conjoint.simulate`` — the line-up's predicted demand split."""
+    ordered = shares.sort(share)
+    names = [str(name) for name in ordered[label].to_list()]
+    ax.barh(names, ordered[share].to_numpy() * 100.0, color=sns.color_palette()[2], alpha=0.85)
+    ax.set(xlabel="share (%)", ylabel="")
+
+
+@chart(title="MaxDiff preference")
+def maxdiff_scores(
+    ax: Axes, scores: pl.DataFrame, *, item: str = "item", value: str = "utility"
+) -> None:
+    """Best-worst item preferences from ``choice.maxdiff_logit`` / ``maxdiff_counts``.
+
+    A diverging bar around 0: items above the line are preferred, below it rejected; pass
+    ``value="score"`` to chart the counting score instead of the logit utility.
+    """
+    ordered = scores.sort(value)
+    palette = sns.color_palette()
+    values = ordered[value].to_numpy()
+    colors = [palette[2] if v >= 0 else palette[3] for v in values]
+    ax.barh([str(name) for name in ordered[item].to_list()], values, color=colors, alpha=0.85)
+    ax.axvline(0.0, color="#444444", linewidth=1.0)
+    ax.set(xlabel=value, ylabel="")
